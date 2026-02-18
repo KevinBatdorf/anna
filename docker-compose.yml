@@ -1,0 +1,76 @@
+services:
+  aria2:
+    image: p3terx/aria2-pro
+    container_name: anna-aria2
+    environment:
+      PUID: 1000
+      PGID: 1000
+      RPC_SECRET: anna
+      RPC_PORT: 6800
+      LISTEN_PORT: 6888
+    volumes:
+      - ./data/torrents:/downloads
+      - ./data/aria2-config:/config
+    ports:
+      - "6800:6800"
+      - "6888:6888"
+      - "6888:6888/udp"
+    restart: unless-stopped
+
+  api:
+    image: oven/bun:alpine
+    container_name: anna-api
+    volumes:
+      - ./:/app:ro
+      - ./data:/data
+    environment:
+      DB_PATH: "/data/db/anna.db"
+      PORT: "3100"
+    command: bun run /app/src/index.ts
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+    depends_on:
+      - aria2
+
+  import-books:
+    image: oven/bun:alpine
+    container_name: anna-import-books
+    volumes:
+      - ./:/app:ro
+      - ./data:/data
+    environment:
+      DATA_DIR: "/data/torrents"
+      DB_PATH: "/data/db/anna.db"
+    command: sh -c "apk add --no-cache zstd && bun run /app/scripts/import-books.ts"
+    profiles:
+      - import
+
+  import-goodreads:
+    image: oven/bun:alpine
+    container_name: anna-import-goodreads
+    volumes:
+      - ./:/app:ro
+      - ./data:/data
+    environment:
+      DATA_DIR: "/data/torrents"
+      DB_PATH: "/data/db/anna.db"
+    command: sh -c "apk add --no-cache zstd && bun run /app/scripts/import-goodreads.ts"
+    profiles:
+      - import
+
+  updater:
+    image: oven/bun:alpine
+    container_name: anna-updater
+    volumes:
+      - ./:/app:ro
+      - ./data:/data
+    environment:
+      ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
+      ARIA2_SECRET: "anna"
+      NTFY_URL: "http://host.docker.internal:2586"
+      NTFY_TOKEN: "tk_cnr862etyq79oimd8sw7wzeem7k4v"
+    command: bun run /app/scripts/check-update.ts
+    restart: unless-stopped
+    depends_on:
+      - aria2
