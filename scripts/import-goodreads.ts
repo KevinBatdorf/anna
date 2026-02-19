@@ -4,6 +4,7 @@ import { type GoodreadsRow, parseGoodreads } from '../src/lib/parse-goodreads';
 
 const DATA_DIR = process.env.DATA_DIR || '/data/torrents';
 const DB_PATH = process.env.DB_PATH || '/data/db/anna.db';
+const RECORD_LIMIT = process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0;
 
 const db = new Database(DB_PATH);
 db.run('PRAGMA journal_mode = WAL');
@@ -56,6 +57,7 @@ async function main() {
 	}
 
 	console.log(`Importing goodreads from: ${file}`);
+	if (RECORD_LIMIT) console.log(`  LIMIT: ${RECORD_LIMIT} records`);
 	const startTime = Date.now();
 
 	const proc = Bun.spawn(['zstdcat', `${DATA_DIR}/${file}`], {
@@ -100,6 +102,7 @@ async function main() {
 
 		for (const line of lines) {
 			if (!line.trim()) continue;
+			if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
 			const row = parseGoodreads(line);
 			if (row) batch.push(row);
 			else errors++;
@@ -117,12 +120,17 @@ async function main() {
 				}
 			}
 		}
+		if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
 	}
 
-	if (buffer.trim()) {
-		const row = parseGoodreads(buffer);
-		if (row) batch.push(row);
-		else errors++;
+	if (RECORD_LIMIT) proc.kill();
+
+	if (!RECORD_LIMIT || count + batch.length < RECORD_LIMIT) {
+		if (buffer.trim()) {
+			const row = parseGoodreads(buffer);
+			if (row) batch.push(row);
+			else errors++;
+		}
 	}
 	if (batch.length > 0) {
 		flush(batch);
