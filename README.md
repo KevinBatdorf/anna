@@ -60,7 +60,9 @@ Add to your MCP client config:
 }
 ```
 
-Available tools: `search_books`, `search_goodreads`, `find_similar`, `lookup_isbn`, `lookup_md5`, `get_stats`. Hit `GET /mcp` for a quick summary.
+Available tools: `search_books`, `search_goodreads`, `find_similar`, `lookup_isbn`, `lookup_md5`, `get_stats`, `get_download_url`. Hit `GET /mcp` for a quick summary.
+
+The `get_download_url` tool returns a temporary direct download URL for a book file. To actually download and read the file content (PDF, EPUB, etc.), pair this server with an MCP tool that can fetch URLs and parse document formats.
 
 ## Claude Code Plugin
 

@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { Hono } from 'hono';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/db/schema';
+import { downloadRoutes } from '../src/routes/download';
 import { lookupRoutes } from '../src/routes/lookup';
 import { mcpRoutes } from '../src/routes/mcp';
 import { searchRoutes } from '../src/routes/search';
@@ -111,6 +112,7 @@ function createTestApp() {
 	app.route('/', similarRoutes(db, sqlite));
 	app.route('/', lookupRoutes(db));
 	app.route('/', statsRoutes(sqlite));
+	app.route('/', downloadRoutes());
 	mcpRoutes(app);
 	app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
@@ -155,6 +157,7 @@ describe('POST /mcp — tools/list', () => {
 		expect(names).toContain('lookup_isbn');
 		expect(names).toContain('lookup_md5');
 		expect(names).toContain('get_stats');
+		expect(names).toContain('get_download_url');
 	});
 });
 
@@ -208,6 +211,16 @@ describe('POST /mcp — tools/call', () => {
 		const data = JSON.parse(body.result.content[0].text);
 		expect(data.books).toBe(1);
 		expect(data.goodreads).toBe(1);
+	});
+
+	it('get_download_url returns error when API key not configured', async () => {
+		const { body } = await rpc('tools/call', {
+			name: 'get_download_url',
+			arguments: { md5: 'abc123md5' },
+		});
+		const data = JSON.parse(body.result.content[0].text);
+		// Without ANNAS_API_KEY set, the download route returns an error
+		expect(data.error).toBeDefined();
 	});
 
 	it('find_similar returns 503 when vec search is unavailable', async () => {

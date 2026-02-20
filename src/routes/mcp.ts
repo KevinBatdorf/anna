@@ -194,6 +194,74 @@ function registerTools(server: McpServer, app: Hono) {
 			};
 		},
 	);
+
+	server.registerTool(
+		'get_download_url',
+		{
+			title: 'Get Download URL',
+			description:
+				'Get a direct download URL for a book file by MD5 hash. Returns a temporary URL, suggested filename, and file metadata. Use a file download tool (e.g. mcp-url-downloader) to save the file. Requires ANNAS_API_KEY to be configured.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book file'),
+			},
+		},
+		async ({ md5 }) => {
+			const res = await app.request(`/download?md5=${encodeURIComponent(md5)}`);
+			const data = await res.json();
+
+			if (!res.ok || data.error) {
+				return {
+					content: [
+						{
+							type: 'text',
+							text: JSON.stringify(
+								{
+									error: data.error ?? 'Download URL request failed',
+									detail: data,
+								},
+								null,
+								2,
+							),
+						},
+					],
+					isError: true,
+				};
+			}
+
+			// Include book metadata for a good filename suggestion
+			const lookupRes = await app.request(
+				`/lookup/md5?md5=${encodeURIComponent(md5)}`,
+			);
+			const lookupData = await lookupRes.json();
+			const book = lookupData?.book;
+			const ext = book?.extension || 'bin';
+			const title = book?.title?.replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || md5;
+			const author = book?.author?.replace(/[^a-zA-Z0-9_\- ]/g, '').trim();
+			const basename = author ? `${title} - ${author}` : title;
+			const filename = `${basename.slice(0, 200)}.${ext}`;
+
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify(
+							{
+								...data,
+								suggested_filename: filename,
+								md5,
+								extension: ext,
+								title: book?.title ?? null,
+								author: book?.author ?? null,
+								filesize: book?.filesize ?? null,
+							},
+							null,
+							2,
+						),
+					},
+				],
+			};
+		},
+	);
 }
 
 /** Create a connected MCP server+client pair for handling a single request. */
@@ -289,6 +357,7 @@ export function mcpRoutes(app: Hono) {
 				'lookup_isbn',
 				'lookup_md5',
 				'get_stats',
+				'get_download_url',
 			],
 			usage: 'POST JSON-RPC 2.0 requests to this endpoint',
 		});
