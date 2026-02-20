@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { startUpdateLoop } from '../scripts/check-update';
 import { db, raw } from './db';
 import { downloadRoutes } from './routes/download';
 import { lookupRoutes } from './routes/lookup';
@@ -33,5 +34,10 @@ app.get('/', (c) =>
 );
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
+
+// Start update checker in-process (same process = safe SQLite access)
+if (import.meta.main) {
+	startUpdateLoop();
+}
 
 export default app;

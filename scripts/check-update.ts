@@ -238,9 +238,16 @@ async function check() {
 	}
 }
 
-// Run immediately, then on interval
-check();
-setInterval(check, CHECK_INTERVAL);
-console.log(
-	`Update checker running (every 24h, min download interval: ${UPDATE_MIN_DAYS}d)`,
-);
+/** Start the update checker loop (run immediately, then on interval). */
+export function startUpdateLoop() {
+	console.log(
+		`Update checker running (every 24h, min download interval: ${UPDATE_MIN_DAYS}d)`,
+	);
+	check();
+	setInterval(check, CHECK_INTERVAL);
+}
+
+// Allow running directly as a script
+if (import.meta.main) {
+	startUpdateLoop();
+}

@@ -11,8 +11,10 @@ const DEFAULT_DB_PATH = '/data/db/anna.db';
 function openDb(dbPath: string) {
 	const db = new Database(dbPath);
 	db.run('PRAGMA journal_mode = WAL');
+	db.run('PRAGMA busy_timeout = 10000');
 	db.run('PRAGMA synchronous = NORMAL');
 	db.run('PRAGMA cache_size = -64000');
+	db.run('PRAGMA mmap_size = 4294967296');
 
 	db.run(`CREATE TABLE IF NOT EXISTS books (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,6 +180,10 @@ async function importFile(
 					console.log(
 						`  ${count.toLocaleString()} records (${rate}/s, ${errors} errors)`,
 					);
+				}
+				// Checkpoint WAL every 1M records to prevent unbounded growth
+				if (count % 1_000_000 === 0) {
+					db.run('PRAGMA wal_checkpoint(PASSIVE)');
 				}
 			}
 		}

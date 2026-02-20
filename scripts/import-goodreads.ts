@@ -11,8 +11,10 @@ const DEFAULT_DB_PATH = '/data/db/anna.db';
 function openDb(dbPath: string) {
 	const db = new Database(dbPath);
 	db.run('PRAGMA journal_mode = WAL');
+	db.run('PRAGMA busy_timeout = 10000');
 	db.run('PRAGMA synchronous = NORMAL');
 	db.run('PRAGMA cache_size = -64000');
+	db.run('PRAGMA mmap_size = 4294967296');
 
 	db.run(`CREATE TABLE IF NOT EXISTS goodreads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

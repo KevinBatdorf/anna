@@ -4,7 +4,7 @@ import * as schema from './schema';
 
 const DB_PATH = process.env.DB_PATH || '/data/db/anna.db';
 
-const sqlite = new Database(DB_PATH, { readonly: true });
+const sqlite = new Database(DB_PATH, { create: true });
 sqlite.run('PRAGMA journal_mode = WAL');
 sqlite.run('PRAGMA busy_timeout = 5000');
 sqlite.run('PRAGMA mmap_size = 4294967296');
