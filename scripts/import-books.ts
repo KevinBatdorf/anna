@@ -1,17 +1,20 @@
 import { Database } from 'bun:sqlite';
-import { readdir } from 'node:fs/promises';
-import { type BookRow, parseBook } from '../src/lib/parse-books';
+import type { Book } from '../src/db/schema';
+import { parseBook } from '../src/lib/parse-books';
+import { filterNewFiles, findDataFiles } from './lib/find-data-file';
 
-const DATA_DIR = process.env.DATA_DIR || '/data/torrents';
-const DB_PATH = process.env.DB_PATH || '/data/db/anna.db';
-const RECORD_LIMIT = process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0;
+type NewBook = Omit<Book, 'id'>;
 
-const db = new Database(DB_PATH);
-db.run('PRAGMA journal_mode = WAL');
-db.run('PRAGMA synchronous = NORMAL');
-db.run('PRAGMA cache_size = -64000');
+const DEFAULT_DATA_DIR = '/data/torrents';
+const DEFAULT_DB_PATH = '/data/db/anna.db';
 
-db.run(`CREATE TABLE IF NOT EXISTS books (
+function openDb(dbPath: string) {
+	const db = new Database(dbPath);
+	db.run('PRAGMA journal_mode = WAL');
+	db.run('PRAGMA synchronous = NORMAL');
+	db.run('PRAGMA cache_size = -64000');
+
+	db.run(`CREATE TABLE IF NOT EXISTS books (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source TEXT NOT NULL,
   source_id TEXT,
@@ -30,40 +33,75 @@ db.run(`CREATE TABLE IF NOT EXISTS books (
   edition TEXT
 )`);
 
-db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS books_fts USING fts5(
+	db.run(
+		'CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_id ON books(source_id)',
+	);
+
+	db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS books_fts USING fts5(
   title, author, publisher, description, isbn,
   content=books,
-  content_rowid=id
+  content_rowid=id,
+  tokenize='porter unicode61'
 )`);
 
-db.run(`CREATE TABLE IF NOT EXISTS import_meta (
+	db.run(`CREATE TABLE IF NOT EXISTS import_meta (
   key TEXT PRIMARY KEY,
   value TEXT
 )`);
 
-async function main() {
-	const allFiles = await readdir(DATA_DIR);
-	const downloading = new Set(
-		allFiles
-			.filter((f) => f.endsWith('.aria2'))
-			.map((f) => f.replace(/\.aria2$/, '')),
-	);
+	return db;
+}
 
-	const file = allFiles.find(
-		(f) =>
-			f.includes('zlib3_records') && f.endsWith('.zst') && !downloading.has(f),
-	);
-
-	if (!file) {
-		console.error('No complete zlib3 data file found in', DATA_DIR);
-		process.exit(1);
+function getImportedFiles(db: Database): Set<string> {
+	const row = db
+		.prepare("SELECT value FROM import_meta WHERE key = 'zlib3_imported_files'")
+		.get() as { value: string } | undefined;
+	if (!row?.value) return new Set();
+	try {
+		return new Set(JSON.parse(row.value));
+	} catch {
+		return new Set();
 	}
+}
 
-	console.log(`Importing books from: ${file}`);
-	if (RECORD_LIMIT) console.log(`  LIMIT: ${RECORD_LIMIT} records`);
+function saveImportedFiles(db: Database, files: Set<string>) {
+	db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+		'zlib3_imported_files',
+		JSON.stringify([...files]),
+	]);
+}
+
+function bookToParams(b: NewBook) {
+	return [
+		b.source,
+		b.source_id,
+		b.title,
+		b.author,
+		b.publisher,
+		b.language,
+		b.year,
+		b.extension,
+		b.filesize,
+		b.pages,
+		b.description,
+		b.md5,
+		b.isbn,
+		b.series,
+		b.edition,
+	];
+}
+
+async function importFile(
+	db: Database,
+	dataDir: string,
+	file: string,
+	recordLimit: number,
+): Promise<{ count: number; errors: number }> {
+	console.log(`\nImporting books from: ${file}`);
+	if (recordLimit) console.log(`  LIMIT: ${recordLimit} records`);
 	const startTime = Date.now();
 
-	const proc = Bun.spawn(['zstdcat', `${DATA_DIR}/${file}`], {
+	const proc = Bun.spawn(['zstdcat', `${dataDir}/${file}`], {
 		stdout: 'pipe',
 		stderr: 'pipe',
 	});
@@ -72,28 +110,43 @@ async function main() {
 	let buffer = '';
 	let count = 0;
 	let errors = 0;
+	let upserted = 0;
 
-	const insert = db.prepare(
-		`INSERT INTO books (source, source_id, title, author, publisher, language, year, extension, filesize, pages, description, md5, isbn, series, edition)
+	const upsert = db.prepare(
+		`INSERT OR REPLACE INTO books (source, source_id, title, author, publisher, language, year, extension, filesize, pages, description, md5, isbn, series, edition)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
+
+	const deleteFts = db.prepare('DELETE FROM books_fts WHERE rowid = ?');
 	const insertFts = db.prepare(
-		`INSERT INTO books_fts (rowid, title, author, publisher, description, isbn) VALUES (?, ?, ?, ?, ?, ?)`,
+		'INSERT INTO books_fts (rowid, title, author, publisher, description, isbn) VALUES (?, ?, ?, ?, ?, ?)',
 	);
+	const findExisting = db.prepare('SELECT id FROM books WHERE source_id = ?');
 
 	const BATCH_SIZE = 5000;
-	let batch: BookRow[] = [];
+	let batch: NewBook[] = [];
 
-	const flush = db.transaction((rows: BookRow[]) => {
+	const flush = db.transaction((rows: NewBook[]) => {
 		for (const row of rows) {
-			const result = insert.run(...row);
+			const existing = findExisting.get(row.source_id) as
+				| { id: number }
+				| undefined;
+			if (existing) {
+				deleteFts.run(existing.id);
+			}
+			const result = upsert.run(...bookToParams(row));
 			const rowid = result.lastInsertRowid;
-			insertFts.run(rowid, row[2], row[3], row[4], row[10], row[12]);
+			insertFts.run(
+				rowid,
+				row.title,
+				row.author,
+				row.publisher,
+				row.description,
+				row.isbn,
+			);
+			upserted++;
 		}
 	});
-
-	db.run('DELETE FROM books_fts');
-	db.run('DELETE FROM books');
 
 	while (true) {
 		const { done, value } = await reader.read();
@@ -105,7 +158,7 @@ async function main() {
 
 		for (const line of lines) {
 			if (!line.trim()) continue;
-			if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
+			if (recordLimit && count + batch.length >= recordLimit) break;
 			const row = parseBook(line);
 			if (row) batch.push(row);
 			else errors++;
@@ -123,12 +176,12 @@ async function main() {
 				}
 			}
 		}
-		if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
+		if (recordLimit && count + batch.length >= recordLimit) break;
 	}
 
-	if (RECORD_LIMIT) proc.kill();
+	if (recordLimit) proc.kill();
 
-	if (!RECORD_LIMIT || count + batch.length < RECORD_LIMIT) {
+	if (!recordLimit || count + batch.length < recordLimit) {
 		if (buffer.trim()) {
 			const row = parseBook(buffer);
 			if (row) batch.push(row);
@@ -142,28 +195,91 @@ async function main() {
 
 	const elapsed = (Date.now() - startTime) / 1000;
 	console.log(
-		`Done: ${count.toLocaleString()} records in ${elapsed.toFixed(0)}s (${errors} errors)`,
+		`  Done: ${count.toLocaleString()} records in ${elapsed.toFixed(0)}s (${upserted} upserted, ${errors} errors)`,
 	);
 
-	db.run('CREATE INDEX IF NOT EXISTS idx_books_md5 ON books(md5)');
-	db.run('CREATE INDEX IF NOT EXISTS idx_books_isbn ON books(isbn)');
-	db.run('CREATE INDEX IF NOT EXISTS idx_books_language ON books(language)');
-	db.run('CREATE INDEX IF NOT EXISTS idx_books_source_id ON books(source_id)');
-
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'zlib3_imported_at',
-		new Date().toISOString(),
-	]);
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'zlib3_file',
-		file,
-	]);
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'zlib3_count',
-		String(count),
-	]);
-
-	db.run('ANALYZE');
+	return { count, errors };
 }
 
-main();
+export async function runImportBooks(opts?: {
+	dataDir?: string;
+	dbPath?: string;
+	limit?: number;
+}): Promise<boolean> {
+	const dataDir = opts?.dataDir ?? process.env.DATA_DIR ?? DEFAULT_DATA_DIR;
+	const dbPath = opts?.dbPath ?? process.env.DB_PATH ?? DEFAULT_DB_PATH;
+	const recordLimit =
+		opts?.limit ?? (process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0);
+
+	const allFiles = await findDataFiles(dataDir, 'zlib3_records');
+	if (allFiles.length === 0) {
+		console.log('No zlib3_records data files found — skipping book import.');
+		return false;
+	}
+
+	const db = openDb(dbPath);
+
+	try {
+		const importedFiles = getImportedFiles(db);
+		const newFiles = filterNewFiles(allFiles, importedFiles);
+
+		if (newFiles.length === 0) {
+			console.log('Books: all files already imported, nothing to do.');
+			return false;
+		}
+
+		console.log(
+			`Books: ${allFiles.length} total file(s), ${newFiles.length} new to import`,
+		);
+
+		let totalCount = 0;
+		let totalErrors = 0;
+
+		for (const file of newFiles) {
+			const { count, errors } = await importFile(
+				db,
+				dataDir,
+				file,
+				recordLimit,
+			);
+			totalCount += count;
+			totalErrors += errors;
+
+			importedFiles.add(file);
+			saveImportedFiles(db, importedFiles);
+		}
+
+		db.run('CREATE INDEX IF NOT EXISTS idx_books_md5 ON books(md5)');
+		db.run('CREATE INDEX IF NOT EXISTS idx_books_isbn ON books(isbn)');
+		db.run('CREATE INDEX IF NOT EXISTS idx_books_language ON books(language)');
+		db.run(
+			'CREATE INDEX IF NOT EXISTS idx_books_extension ON books(extension)',
+		);
+
+		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+			'zlib3_imported_at',
+			new Date().toISOString(),
+		]);
+		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+			'zlib3_count',
+			String(
+				(db.prepare('SELECT COUNT(*) as c FROM books').get() as { c: number })
+					?.c ?? 0,
+			),
+		]);
+
+		console.log(
+			`Books done: ${totalCount.toLocaleString()} records across ${newFiles.length} file(s) (${totalErrors} errors)`,
+		);
+
+		db.run('ANALYZE');
+		return true;
+	} finally {
+		db.close();
+	}
+}
+
+// Allow running directly as a script
+if (import.meta.main) {
+	runImportBooks();
+}

@@ -1,17 +1,20 @@
 import { Database } from 'bun:sqlite';
-import { readdir } from 'node:fs/promises';
-import { type GoodreadsRow, parseGoodreads } from '../src/lib/parse-goodreads';
+import type { Goodreads } from '../src/db/schema';
+import { parseGoodreads } from '../src/lib/parse-goodreads';
+import { filterNewFiles, findDataFiles } from './lib/find-data-file';
 
-const DATA_DIR = process.env.DATA_DIR || '/data/torrents';
-const DB_PATH = process.env.DB_PATH || '/data/db/anna.db';
-const RECORD_LIMIT = process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0;
+type NewGoodreads = Omit<Goodreads, 'id'>;
 
-const db = new Database(DB_PATH);
-db.run('PRAGMA journal_mode = WAL');
-db.run('PRAGMA synchronous = NORMAL');
-db.run('PRAGMA cache_size = -64000');
+const DEFAULT_DATA_DIR = '/data/torrents';
+const DEFAULT_DB_PATH = '/data/db/anna.db';
 
-db.run(`CREATE TABLE IF NOT EXISTS goodreads (
+function openDb(dbPath: string) {
+	const db = new Database(dbPath);
+	db.run('PRAGMA journal_mode = WAL');
+	db.run('PRAGMA synchronous = NORMAL');
+	db.run('PRAGMA cache_size = -64000');
+
+	db.run(`CREATE TABLE IF NOT EXISTS goodreads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_id TEXT,
   title TEXT,
@@ -25,42 +28,72 @@ db.run(`CREATE TABLE IF NOT EXISTS goodreads (
   year TEXT
 )`);
 
-db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS goodreads_fts USING fts5(
+	db.run(
+		'CREATE UNIQUE INDEX IF NOT EXISTS idx_goodreads_source_id ON goodreads(source_id)',
+	);
+
+	db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS goodreads_fts USING fts5(
   title, author, description, genres, isbn,
   content=goodreads,
-  content_rowid=id
+  content_rowid=id,
+  tokenize='porter unicode61'
 )`);
 
-db.run(`CREATE TABLE IF NOT EXISTS import_meta (
+	db.run(`CREATE TABLE IF NOT EXISTS import_meta (
   key TEXT PRIMARY KEY,
   value TEXT
 )`);
 
-async function main() {
-	const allFiles = await readdir(DATA_DIR);
-	const downloading = new Set(
-		allFiles
-			.filter((f) => f.endsWith('.aria2'))
-			.map((f) => f.replace(/\.aria2$/, '')),
-	);
+	return db;
+}
 
-	const file = allFiles.find(
-		(f) =>
-			f.includes('goodreads_records') &&
-			f.endsWith('.zst') &&
-			!downloading.has(f),
-	);
-
-	if (!file) {
-		console.error('No complete goodreads data file found in', DATA_DIR);
-		process.exit(1);
+function getImportedFiles(db: Database): Set<string> {
+	const row = db
+		.prepare(
+			"SELECT value FROM import_meta WHERE key = 'goodreads_imported_files'",
+		)
+		.get() as { value: string } | undefined;
+	if (!row?.value) return new Set();
+	try {
+		return new Set(JSON.parse(row.value));
+	} catch {
+		return new Set();
 	}
+}
 
-	console.log(`Importing goodreads from: ${file}`);
-	if (RECORD_LIMIT) console.log(`  LIMIT: ${RECORD_LIMIT} records`);
+function saveImportedFiles(db: Database, files: Set<string>) {
+	db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+		'goodreads_imported_files',
+		JSON.stringify([...files]),
+	]);
+}
+
+function goodreadsToParams(g: NewGoodreads) {
+	return [
+		g.source_id,
+		g.title,
+		g.author,
+		g.rating,
+		g.ratings_count,
+		g.description,
+		g.genres,
+		g.isbn,
+		g.pages,
+		g.year,
+	];
+}
+
+async function importFile(
+	db: Database,
+	dataDir: string,
+	file: string,
+	recordLimit: number,
+): Promise<{ count: number; errors: number }> {
+	console.log(`\nImporting goodreads from: ${file}`);
+	if (recordLimit) console.log(`  LIMIT: ${recordLimit} records`);
 	const startTime = Date.now();
 
-	const proc = Bun.spawn(['zstdcat', `${DATA_DIR}/${file}`], {
+	const proc = Bun.spawn(['zstdcat', `${dataDir}/${file}`], {
 		stdout: 'pipe',
 		stderr: 'pipe',
 	});
@@ -69,28 +102,45 @@ async function main() {
 	let buffer = '';
 	let count = 0;
 	let errors = 0;
+	let upserted = 0;
 
-	const insert = db.prepare(
-		`INSERT INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
+	const upsert = db.prepare(
+		`INSERT OR REPLACE INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
+
+	const deleteFts = db.prepare('DELETE FROM goodreads_fts WHERE rowid = ?');
 	const insertFts = db.prepare(
-		`INSERT INTO goodreads_fts (rowid, title, author, description, genres, isbn) VALUES (?, ?, ?, ?, ?, ?)`,
+		'INSERT INTO goodreads_fts (rowid, title, author, description, genres, isbn) VALUES (?, ?, ?, ?, ?, ?)',
+	);
+	const findExisting = db.prepare(
+		'SELECT id FROM goodreads WHERE source_id = ?',
 	);
 
 	const BATCH_SIZE = 5000;
-	let batch: GoodreadsRow[] = [];
+	let batch: NewGoodreads[] = [];
 
-	const flush = db.transaction((rows: GoodreadsRow[]) => {
+	const flush = db.transaction((rows: NewGoodreads[]) => {
 		for (const row of rows) {
-			const result = insert.run(...row);
+			const existing = findExisting.get(row.source_id) as
+				| { id: number }
+				| undefined;
+			if (existing) {
+				deleteFts.run(existing.id);
+			}
+			const result = upsert.run(...goodreadsToParams(row));
 			const rowid = result.lastInsertRowid;
-			insertFts.run(rowid, row[1], row[2], row[5], row[6], row[7]);
+			insertFts.run(
+				rowid,
+				row.title,
+				row.author,
+				row.description,
+				row.genres,
+				row.isbn,
+			);
+			upserted++;
 		}
 	});
-
-	db.run('DELETE FROM goodreads_fts');
-	db.run('DELETE FROM goodreads');
 
 	while (true) {
 		const { done, value } = await reader.read();
@@ -102,7 +152,7 @@ async function main() {
 
 		for (const line of lines) {
 			if (!line.trim()) continue;
-			if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
+			if (recordLimit && count + batch.length >= recordLimit) break;
 			const row = parseGoodreads(line);
 			if (row) batch.push(row);
 			else errors++;
@@ -120,12 +170,12 @@ async function main() {
 				}
 			}
 		}
-		if (RECORD_LIMIT && count + batch.length >= RECORD_LIMIT) break;
+		if (recordLimit && count + batch.length >= recordLimit) break;
 	}
 
-	if (RECORD_LIMIT) proc.kill();
+	if (recordLimit) proc.kill();
 
-	if (!RECORD_LIMIT || count + batch.length < RECORD_LIMIT) {
+	if (!recordLimit || count + batch.length < recordLimit) {
 		if (buffer.trim()) {
 			const row = parseGoodreads(buffer);
 			if (row) batch.push(row);
@@ -139,28 +189,91 @@ async function main() {
 
 	const elapsed = (Date.now() - startTime) / 1000;
 	console.log(
-		`Done: ${count.toLocaleString()} records in ${elapsed.toFixed(0)}s (${errors} errors)`,
+		`  Done: ${count.toLocaleString()} records in ${elapsed.toFixed(0)}s (${upserted} upserted, ${errors} errors)`,
 	);
 
-	db.run('CREATE INDEX IF NOT EXISTS idx_goodreads_isbn ON goodreads(isbn)');
-	db.run(
-		'CREATE INDEX IF NOT EXISTS idx_goodreads_source_id ON goodreads(source_id)',
-	);
-
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'goodreads_imported_at',
-		new Date().toISOString(),
-	]);
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'goodreads_file',
-		file,
-	]);
-	db.run(`INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)`, [
-		'goodreads_count',
-		String(count),
-	]);
-
-	db.run('ANALYZE');
+	return { count, errors };
 }
 
-main();
+export async function runImportGoodreads(opts?: {
+	dataDir?: string;
+	dbPath?: string;
+	limit?: number;
+}): Promise<boolean> {
+	const dataDir = opts?.dataDir ?? process.env.DATA_DIR ?? DEFAULT_DATA_DIR;
+	const dbPath = opts?.dbPath ?? process.env.DB_PATH ?? DEFAULT_DB_PATH;
+	const recordLimit =
+		opts?.limit ?? (process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0);
+
+	const allFiles = await findDataFiles(dataDir, 'goodreads_records');
+	if (allFiles.length === 0) {
+		console.log(
+			'No goodreads_records data files found — skipping goodreads import.',
+		);
+		return false;
+	}
+
+	const db = openDb(dbPath);
+
+	try {
+		const importedFiles = getImportedFiles(db);
+		const newFiles = filterNewFiles(allFiles, importedFiles);
+
+		if (newFiles.length === 0) {
+			console.log('Goodreads: all files already imported, nothing to do.');
+			return false;
+		}
+
+		console.log(
+			`Goodreads: ${allFiles.length} total file(s), ${newFiles.length} new to import`,
+		);
+
+		let totalCount = 0;
+		let totalErrors = 0;
+
+		for (const file of newFiles) {
+			const { count, errors } = await importFile(
+				db,
+				dataDir,
+				file,
+				recordLimit,
+			);
+			totalCount += count;
+			totalErrors += errors;
+
+			importedFiles.add(file);
+			saveImportedFiles(db, importedFiles);
+		}
+
+		db.run('CREATE INDEX IF NOT EXISTS idx_goodreads_isbn ON goodreads(isbn)');
+
+		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+			'goodreads_imported_at',
+			new Date().toISOString(),
+		]);
+		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
+			'goodreads_count',
+			String(
+				(
+					db.prepare('SELECT COUNT(*) as c FROM goodreads').get() as {
+						c: number;
+					}
+				)?.c ?? 0,
+			),
+		]);
+
+		console.log(
+			`Goodreads done: ${totalCount.toLocaleString()} records across ${newFiles.length} file(s) (${totalErrors} errors)`,
+		);
+
+		db.run('ANALYZE');
+		return true;
+	} finally {
+		db.close();
+	}
+}
+
+// Allow running directly as a script
+if (import.meta.main) {
+	runImportGoodreads();
+}

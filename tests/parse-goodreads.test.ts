@@ -69,16 +69,16 @@ describe('parseGoodreads', () => {
 	it('parses a real goodreads XML record', () => {
 		const row = parseGoodreads(SAMPLE_LINE);
 		expect(row).not.toBeNull();
-		expect(row?.[0]).toBe('3929483'); // source_id
-		expect(row?.[1]).toBe('Encyclopedia of World Travel'); // title (from title_without_series)
-		expect(row?.[2]).toBe('Nelson Doubleday'); // author (first)
-		expect(row?.[3]).toBe(4.0); // rating
-		expect(row?.[4]).toBe(2); // ratings_count
-		expect(row?.[5]).toBe('8vo, Blue boards, silver letters.'); // description
-		expect(row?.[6]).toBe(''); // genres (not in XML)
-		expect(row?.[7]).toBe('9780385061209'); // isbn13 preferred
-		expect(row?.[8]).toBe('619'); // pages
-		expect(row?.[9]).toBe('1973'); // year
+		expect(row?.source_id).toBe('3929483');
+		expect(row?.title).toBe('Encyclopedia of World Travel');
+		expect(row?.author).toBe('Nelson Doubleday');
+		expect(row?.rating).toBe(4.0);
+		expect(row?.ratings_count).toBe(2);
+		expect(row?.description).toBe('8vo, Blue boards, silver letters.');
+		expect(row?.genres).toBe('');
+		expect(row?.isbn).toBe('9780385061209');
+		expect(row?.pages).toBe('619');
+		expect(row?.year).toBe('1973');
 	});
 
 	it('falls back to <title> when title_without_series is empty', () => {
@@ -96,7 +96,7 @@ describe('parseGoodreads', () => {
 		});
 		const row = parseGoodreads(line);
 		expect(row).not.toBeNull();
-		expect(row?.[1]).toBe('Full Title With Series (#1)');
+		expect(row?.title).toBe('Full Title With Series (#1)');
 	});
 
 	it('falls back to isbn when isbn13 is missing', () => {
@@ -114,7 +114,7 @@ describe('parseGoodreads', () => {
 		});
 		const row = parseGoodreads(line);
 		expect(row).not.toBeNull();
-		expect(row?.[7]).toBe('038506120X');
+		expect(row?.isbn).toBe('038506120X');
 	});
 
 	it('handles 0.00 rating as null', () => {
@@ -131,7 +131,7 @@ describe('parseGoodreads', () => {
 		});
 		const row = parseGoodreads(line);
 		expect(row).not.toBeNull();
-		expect(row?.[3]).toBeNull(); // parseFloat("0.00") || null => null
+		expect(row?.rating).toBeNull();
 	});
 
 	it('returns null for missing record field', () => {
@@ -161,6 +161,6 @@ describe('parseGoodreads', () => {
 		});
 		const row = parseGoodreads(line);
 		expect(row).not.toBeNull();
-		expect(row?.[2]).toBe(''); // author
+		expect(row?.author).toBe('');
 	});
 });

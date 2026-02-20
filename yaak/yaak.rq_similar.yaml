@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_similar
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-20T07:40:50.888288500
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Semantic book discovery via vector search with optional rating filters
+headers: []
+method: GET
+name: Similar
+sortPriority: 2.0
+url: ${[ baseUrl ]}/similar
+urlParameters:
+- enabled: true
+  name: q
+  value: project hail mary
+  id: 84b2rnEDtm
+- enabled: true
+  name: limit
+  value: '10'
+  id: dpBNBwJiVH
+- enabled: false
+  name: min_rating
+  value: '3.5'
+  id: 7c4HmSBuQM
+- enabled: false
+  name: min_reviews
+  value: '100'
+  id: emADhBpdzM
+- enabled: true
+  name: ''
+  value: ''
+  id: wade7EbJuZ

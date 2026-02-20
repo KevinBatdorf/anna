@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_lookup_md5
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:10:27.571524500
+workspaceId: ws_anna
+folderId: fl_lookup
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Look up a book by its MD5 hash
+headers: []
+method: GET
+name: Lookup by MD5
+sortPriority: 0.0
+url: ${[ baseUrl ]}/lookup/md5
+urlParameters:
+- enabled: true
+  name: md5
+  value: 21f19f95c4b969d06fe5860a98e29f0d
+  id: null

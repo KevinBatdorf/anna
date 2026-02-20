@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_search_goodreads
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:34:23.763121100
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Search Goodreads ratings and reviews
+headers: []
+method: GET
+name: Search Goodreads
+sortPriority: 1.0
+url: ${[ baseUrl ]}/search/goodreads
+urlParameters:
+- enabled: true
+  name: q
+  value: project hail mary
+  id: P4hAzT9idb
+- enabled: true
+  name: limit
+  value: '20'
+  id: SBbaUj60HS
+- enabled: true
+  name: offset
+  value: '0'
+  id: aq6up6vn5q
+- enabled: true
+  name: ''
+  value: ''
+  id: mQFsY8fyt8

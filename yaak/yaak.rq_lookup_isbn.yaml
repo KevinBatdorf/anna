@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_lookup_isbn
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:10:37.058753300
+workspaceId: ws_anna
+folderId: fl_lookup
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Look up by ISBN (returns both book file + Goodreads data)
+headers: []
+method: GET
+name: Lookup by ISBN
+sortPriority: 1.0
+url: ${[ baseUrl ]}/lookup/isbn
+urlParameters:
+- enabled: true
+  name: isbn
+  value: '9780385061209'
+  id: null

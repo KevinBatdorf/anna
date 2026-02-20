@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_stats
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:10:49.624338800
+workspaceId: ws_anna
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Database stats and import info
+headers: []
+method: GET
+name: Stats
+sortPriority: 3.0
+url: ${[ baseUrl ]}/stats
+urlParameters: []

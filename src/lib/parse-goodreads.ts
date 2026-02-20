@@ -1,15 +1,6 @@
-export type GoodreadsRow = [
-	source_id: string,
-	title: string,
-	author: string,
-	rating: number | null,
-	ratings_count: number,
-	description: string,
-	genres: string,
-	isbn: string,
-	pages: string,
-	year: string,
-];
+import type { Goodreads } from '../db/schema';
+
+type NewGoodreads = Omit<Goodreads, 'id'>;
 
 export function xmlTag(xml: string, tag: string): string {
 	const re = new RegExp(
@@ -20,7 +11,7 @@ export function xmlTag(xml: string, tag: string): string {
 	return m ? m[1].trim() : '';
 }
 
-export function parseGoodreads(line: string): GoodreadsRow | null {
+export function parseGoodreads(line: string): NewGoodreads | null {
 	try {
 		const obj = JSON.parse(line);
 		const meta = obj.metadata;
@@ -35,18 +26,18 @@ export function parseGoodreads(line: string): GoodreadsRow | null {
 			/<authors>[\s\S]*?<author>[\s\S]*?<name>(.*?)<\/name>/s.exec(xml);
 		const author = authorMatch ? authorMatch[1].trim() : '';
 
-		return [
-			String(meta.id ?? ''),
+		return {
+			source_id: String(meta.id ?? ''),
 			title,
 			author,
 			rating,
-			ratingsCount,
-			xmlTag(xml, 'description'),
-			'',
-			xmlTag(xml, 'isbn13') || xmlTag(xml, 'isbn'),
-			xmlTag(xml, 'num_pages'),
-			xmlTag(xml, 'publication_year'),
-		];
+			ratings_count: ratingsCount,
+			description: xmlTag(xml, 'description'),
+			genres: '',
+			isbn: xmlTag(xml, 'isbn13') || xmlTag(xml, 'isbn'),
+			pages: xmlTag(xml, 'num_pages'),
+			year: xmlTag(xml, 'publication_year'),
+		};
 	} catch {
 		return null;
 	}

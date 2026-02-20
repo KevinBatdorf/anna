@@ -1,0 +1,66 @@
+# Anna's Archive Book Search API
+
+> Klanker disclosure: This project was vibe-coded.
+
+A self-hosted REST API for searching and discovering books, powered by data from [Anna's Archive](https://en.wikipedia.org/wiki/Anna%27s_Archive) and Goodreads.
+
+Downloads two open datasets via torrent (Zlib3 book metadata + Goodreads ratings), imports them into SQLite with full-text search, and serves a JSON API. Does **not** host or serve any book files — it's a metadata search engine.
+
+## Setup
+
+```sh
+cp .env.example .env   # edit to set API key, etc.
+docker compose up -d
+```
+
+The updater downloads the full datasets via torrent (~40 GB for books, ~5 GB for Goodreads) and imports them into SQLite automatically. The API is live at `http://localhost:3100` once the first import finishes.
+
+## Data Updates
+
+The updater checks for new data daily but won't download more than once every 30 days (configurable via `UPDATE_INTERVAL_DAYS` in `.env`). Each update downloads the full dataset torrents again — Anna's Archive publishes incremental files, and the importer deduplicates via upsert, so existing records are updated in place without a full re-import.
+
+## Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /search?q=...` | Full-text search across book records |
+| `GET /search/goodreads?q=...` | Search Goodreads ratings & reviews |
+| `GET /similar?q=...` | Semantic book discovery with availability |
+| `GET /lookup/md5?md5=...` | Look up a book by MD5 hash |
+| `GET /lookup/isbn?isbn=...` | Look up by ISBN (books + Goodreads) |
+| `GET /download?md5=...` | Get download URL (requires `ANNAS_API_KEY`) |
+| `GET /stats` | Database stats and import info |
+
+`/search` supports `?ext=pdf` to filter by format and `?dedupe=false` to show all formats (default deduplicates by title+author, keeping PDF > epub > other). `/similar` supports `?min_rating=` and `?min_reviews=` to filter by quality.
+
+See `skills/book-search/SKILL.md` for detailed API docs and agent workflows.
+
+## Semantic Search (Optional)
+
+For better search quality, you can enable vector embeddings powered by [Ollama](https://ollama.ai). Set `OLLAMA_URL` in `.env` and pull `nomic-embed-text` (`ollama pull nomic-embed-text`). The updater will embed Goodreads records incrementally — this is fully resumable, so it picks up where it left off across restarts. When embeddings are available, `/search/goodreads` and `/similar` use vector similarity instead of keyword matching.
+
+You can add `OLLAMA_URL` at any time — even after the initial data import. The updater checks every 24 hours and will start embedding automatically on its next cycle. To start immediately, restart the updater: `docker compose restart updater`.
+
+**Heads up:** The initial embedding of the full Goodreads catalog (~11M records) will roughly double your database size and takes a while — expect 1-2 weeks depending on your hardware. Subsequent updates only embed new records, so after the first run it stays quick. You can set `LIMIT=1000` in `.env` to embed a small batch first and verify everything works before committing to the full run.
+
+## Claude Code Plugin
+
+This project includes a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) so Claude can search for books from any project.
+
+To install it, add an entry to your `~/.claude/plugins/installed_plugins.json`:
+
+```json
+{
+  "anna-book-search@local": [
+    {
+      "scope": "user",
+      "installPath": "/absolute/path/to/anna",
+      "version": "0.2.0",
+      "installedAt": "2026-01-01T00:00:00.000Z",
+      "lastUpdated": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Replace `installPath` with the absolute path to this repo on your machine. After restarting Claude Code, the book search skill will be available in all conversations.

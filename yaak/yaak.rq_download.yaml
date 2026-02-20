@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_download
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:18:35.096616200
+workspaceId: ws_anna
+folderId: fl_lookup
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Get download URL via Anna's Archive API (requires ANNAS_API_KEY)
+headers: []
+method: GET
+name: Download
+sortPriority: 2.0
+url: ${[ baseUrl ]}/download
+urlParameters:
+- enabled: true
+  name: md5
+  value: 21f19f95c4b969d06fe5860a98e29f0d
+  id: JyIB94hj6F
+- enabled: true
+  name: ''
+  value: ''
+  id: PsGzM9Wgbw

@@ -1,0 +1,8 @@
+{
+	"name": "anna-book-search",
+	"description": "Search for books, discover similar titles, and download from a self-hosted Anna's Archive API with Goodreads ratings",
+	"version": "0.2.0",
+	"author": {
+		"name": "klanker"
+	}
+}

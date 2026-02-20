@@ -1,0 +1,15 @@
+type: workspace
+model: workspace
+id: ws_anna
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-19T19:12:15.004972800
+authentication: {}
+authenticationType: null
+description: Self-hosted book search & discovery API
+headers: []
+name: Anna's Archive API
+encryptionKeyChallenge: null
+settingValidateCertificates: true
+settingFollowRedirects: true
+settingRequestTimeout: 0
+settingDnsOverrides: []

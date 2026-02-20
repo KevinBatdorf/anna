@@ -31,21 +31,21 @@ describe('parseBook', () => {
 	it('parses a real zlib3 record', () => {
 		const row = parseBook(SAMPLE_LINE);
 		expect(row).not.toBeNull();
-		expect(row?.[0]).toBe('zlib3');
-		expect(row?.[1]).toBe('22430000'); // source_id
-		expect(row?.[2]).toBe('Els nens de la senyora Zlatin'); // title
-		expect(row?.[3]).toBe('Maria Lluïsa Amorós'); // author
-		expect(row?.[4]).toBe('ePubLibre'); // publisher
-		expect(row?.[5]).toBe('catalan'); // language
-		expect(row?.[6]).toBe('2021'); // year
-		expect(row?.[7]).toBe('epub'); // extension
-		expect(row?.[8]).toBe(483359); // filesize
-		expect(row?.[9]).toBe(''); // pages
-		expect(row?.[10]).toBe('França, 1943.'); // description
-		expect(row?.[11]).toBe('21f19f95c4b969d06fe5860a98e29f0d'); // md5
-		expect(row?.[12]).toBe(''); // isbn (empty isbns array)
-		expect(row?.[13]).toBe(''); // series
-		expect(row?.[14]).toBe(''); // edition
+		expect(row?.source).toBe('zlib3');
+		expect(row?.source_id).toBe('22430000');
+		expect(row?.title).toBe('Els nens de la senyora Zlatin');
+		expect(row?.author).toBe('Maria Lluïsa Amorós');
+		expect(row?.publisher).toBe('ePubLibre');
+		expect(row?.language).toBe('catalan');
+		expect(row?.year).toBe('2021');
+		expect(row?.extension).toBe('epub');
+		expect(row?.filesize).toBe(483359);
+		expect(row?.pages).toBe('');
+		expect(row?.description).toBe('França, 1943.');
+		expect(row?.md5).toBe('21f19f95c4b969d06fe5860a98e29f0d');
+		expect(row?.isbn).toBe('');
+		expect(row?.series).toBe('');
+		expect(row?.edition).toBe('');
 	});
 
 	it('extracts first isbn from isbns array', () => {
@@ -69,7 +69,7 @@ describe('parseBook', () => {
 		});
 		const row = parseBook(line);
 		expect(row).not.toBeNull();
-		expect(row?.[12]).toBe('9780123456789');
+		expect(row?.isbn).toBe('9780123456789');
 	});
 
 	it('falls back to isbn field if isbns is not an array', () => {
@@ -93,7 +93,7 @@ describe('parseBook', () => {
 		});
 		const row = parseBook(line);
 		expect(row).not.toBeNull();
-		expect(row?.[12]).toBe('978OLD');
+		expect(row?.isbn).toBe('978OLD');
 	});
 
 	it('returns null for invalid JSON', () => {
@@ -108,9 +108,9 @@ describe('parseBook', () => {
 		const line = JSON.stringify({ metadata: { zlibrary_id: 99 } });
 		const row = parseBook(line);
 		expect(row).not.toBeNull();
-		expect(row?.[0]).toBe('zlib3');
-		expect(row?.[1]).toBe('99');
-		expect(row?.[2]).toBe(''); // title defaults to ""
-		expect(row?.[8]).toBe(0); // filesize defaults to 0
+		expect(row?.source).toBe('zlib3');
+		expect(row?.source_id).toBe('99');
+		expect(row?.title).toBe('');
+		expect(row?.filesize).toBe(0);
 	});
 });

@@ -4,8 +4,8 @@ import { Hono } from 'hono';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/db/schema';
 import { lookupRoutes } from '../src/routes/lookup';
-import { recommendRoutes } from '../src/routes/recommend';
 import { searchRoutes } from '../src/routes/search';
+import { similarRoutes } from '../src/routes/similar';
 import { statsRoutes } from '../src/routes/stats';
 
 function createTestApp() {
@@ -19,7 +19,8 @@ function createTestApp() {
     isbn TEXT, series TEXT, edition TEXT
   )`);
 	sqlite.run(`CREATE VIRTUAL TABLE books_fts USING fts5(
-    title, author, publisher, description, isbn, content=books, content_rowid=id
+    title, author, publisher, description, isbn, content=books, content_rowid=id,
+    tokenize='porter unicode61'
   )`);
 	sqlite.run(`CREATE TABLE goodreads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +29,8 @@ function createTestApp() {
     isbn TEXT, pages TEXT, year TEXT
   )`);
 	sqlite.run(`CREATE VIRTUAL TABLE goodreads_fts USING fts5(
-    title, author, description, genres, isbn, content=goodreads, content_rowid=id
+    title, author, description, genres, isbn, content=goodreads, content_rowid=id,
+    tokenize='porter unicode61'
   )`);
 	sqlite.run(`CREATE TABLE import_meta (key TEXT PRIMARY KEY, value TEXT)`);
 
@@ -93,6 +95,33 @@ function createTestApp() {
 		'9780441172719',
 	);
 
+	// Same book as book1 but PDF — for testing format preference sorting
+	const book3 = insertBook.run(
+		'zlib3',
+		'789',
+		'The Hobbit',
+		'J.R.R. Tolkien',
+		'Allen & Unwin',
+		'en',
+		'1937',
+		'pdf',
+		600000,
+		'310',
+		'A fantasy novel',
+		'ghi789md5',
+		'9780261103344',
+		'Middle-earth',
+		'2nd',
+	);
+	insertBookFts.run(
+		book3.lastInsertRowid,
+		'The Hobbit',
+		'J.R.R. Tolkien',
+		'Allen & Unwin',
+		'A fantasy novel',
+		'9780261103344',
+	);
+
 	// Seed goodreads
 	const insertGr = sqlite.prepare(
 		`INSERT INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
@@ -146,7 +175,7 @@ function createTestApp() {
 
 	// Seed import_meta
 	sqlite.run(
-		`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '2')`,
+		`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '3')`,
 	);
 	sqlite.run(
 		`INSERT INTO import_meta (key, value) VALUES ('goodreads_count', '2')`,
@@ -155,8 +184,8 @@ function createTestApp() {
 	const db = drizzle(sqlite, { schema });
 
 	const app = new Hono();
-	app.route('/', searchRoutes(db));
-	app.route('/', recommendRoutes(db));
+	app.route('/', searchRoutes(db, sqlite));
+	app.route('/', similarRoutes(db, sqlite));
 	app.route('/', lookupRoutes(db));
 	app.route('/', statsRoutes(db));
 	app.get('/', (c) => c.json({ name: 'test' }));
@@ -205,9 +234,38 @@ describe('GET /search', () => {
 	});
 
 	it('respects limit', async () => {
-		const { status, body } = await get('/search?q=*&limit=1');
+		const { status, body } = await get('/search?q=hobbit&limit=1');
 		expect(status).toBe(200);
 		expect(body.results.length).toBeLessThanOrEqual(1);
+	});
+
+	it('filters by extension', async () => {
+		const { status, body } = await get('/search?q=dune&ext=pdf');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.ext).toBe('pdf');
+		expect(body.results[0].extension).toBe('pdf');
+	});
+
+	it('returns empty when extension does not match', async () => {
+		const { status, body } = await get('/search?q=dune&ext=epub');
+		expect(status).toBe(200);
+		expect(body.count).toBe(0);
+	});
+
+	it('deduplicates by title+author keeping best format (pdf)', async () => {
+		const { status, body } = await get('/search?q=hobbit');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].extension).toBe('pdf');
+	});
+
+	it('returns all formats when dedupe=false', async () => {
+		const { status, body } = await get('/search?q=hobbit&dedupe=false');
+		expect(status).toBe(200);
+		expect(body.count).toBe(2);
+		expect(body.results[0].extension).toBe('pdf');
+		expect(body.results[1].extension).toBe('epub');
 	});
 });
 
@@ -229,34 +287,6 @@ describe('GET /search/goodreads', () => {
 
 	it('returns 400 without q param', async () => {
 		const { status } = await get('/search/goodreads');
-		expect(status).toBe(400);
-	});
-});
-
-describe('GET /recommend', () => {
-	it('returns high-rated books', async () => {
-		const { status, body } = await get('/recommend?q=hobbit');
-		expect(status).toBe(200);
-		expect(body.count).toBe(1);
-		expect(body.results[0].rating).toBeGreaterThanOrEqual(3.5);
-		expect(body.results[0].ratings_count).toBeGreaterThanOrEqual(100);
-	});
-
-	it('filters out low-rated books', async () => {
-		const { status, body } = await get('/recommend?q=obscure');
-		expect(status).toBe(200);
-		expect(body.count).toBe(0);
-	});
-
-	it('includes available book data when ISBN matches', async () => {
-		const { status, body } = await get('/recommend?q=hobbit');
-		expect(status).toBe(200);
-		expect(body.results[0].available).not.toBeNull();
-		expect(body.results[0].available.md5).toBe('abc123md5');
-	});
-
-	it('returns 400 without q param', async () => {
-		const { status } = await get('/recommend');
 		expect(status).toBe(400);
 	});
 });
@@ -306,10 +336,24 @@ describe('GET /stats', () => {
 	it('returns counts and import metadata', async () => {
 		const { status, body } = await get('/stats');
 		expect(status).toBe(200);
-		expect(body.books).toBe(2);
+		expect(body.books).toBe(3);
 		expect(body.goodreads).toBe(2);
-		expect(body.import.zlib3_count).toBe('2');
+		expect(body.import.zlib3_count).toBe('3');
 		expect(body.import.goodreads_count).toBe('2');
+	});
+});
+
+describe('GET /similar', () => {
+	it('returns 400 without q param', async () => {
+		const { status, body } = await get('/similar');
+		expect(status).toBe(400);
+		expect(body.error).toBeDefined();
+	});
+
+	it('returns 503 when vec search is not available', async () => {
+		const { status, body } = await get('/similar?q=hobbit');
+		expect(status).toBe(503);
+		expect(body.error).toContain('Vector search not available');
 	});
 });
 
