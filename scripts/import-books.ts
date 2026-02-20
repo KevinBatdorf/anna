@@ -49,6 +49,11 @@ function openDb(dbPath: string) {
   value TEXT
 )`);
 
+	// Mark FTS tokenizer so migrate-fts doesn't try to rebuild
+	db.run(
+		"INSERT OR IGNORE INTO import_meta (key, value) VALUES ('fts_tokenizer', 'porter unicode61')",
+	);
+
 	return db;
 }
 
