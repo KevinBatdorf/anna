@@ -12,9 +12,8 @@ function openDb(dbPath: string) {
 	const db = new Database(dbPath);
 	db.run('PRAGMA journal_mode = WAL');
 	db.run('PRAGMA busy_timeout = 10000');
-	db.run('PRAGMA synchronous = NORMAL');
+	db.run('PRAGMA synchronous = FULL');
 	db.run('PRAGMA cache_size = -64000');
-	db.run('PRAGMA mmap_size = 4294967296');
 
 	db.run(`CREATE TABLE IF NOT EXISTS books (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,33 +123,13 @@ async function importFile(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
 
-	const deleteFts = db.prepare('DELETE FROM books_fts WHERE rowid = ?');
-	const insertFts = db.prepare(
-		'INSERT INTO books_fts (rowid, title, author, publisher, description, isbn) VALUES (?, ?, ?, ?, ?, ?)',
-	);
-	const findExisting = db.prepare('SELECT id FROM books WHERE source_id = ?');
-
 	const BATCH_SIZE = 5000;
 	let batch: NewBook[] = [];
 
+	// Insert rows without FTS — FTS is populated in bulk after import
 	const flush = db.transaction((rows: NewBook[]) => {
 		for (const row of rows) {
-			const existing = findExisting.get(row.source_id) as
-				| { id: number }
-				| undefined;
-			if (existing) {
-				deleteFts.run(existing.id);
-			}
-			const result = upsert.run(...bookToParams(row));
-			const rowid = result.lastInsertRowid;
-			insertFts.run(
-				rowid,
-				row.title,
-				row.author,
-				row.publisher,
-				row.description,
-				row.isbn,
-			);
+			upsert.run(...bookToParams(row));
 			upserted++;
 		}
 	});
@@ -269,16 +248,28 @@ export async function runImportBooks(opts?: {
 			'CREATE INDEX IF NOT EXISTS idx_books_extension ON books(extension)',
 		);
 
+		// Populate FTS in bulk (much safer than per-row inserts during import)
+		console.log('  Populating FTS index...');
+		db.run('DELETE FROM books_fts');
+		db.run(
+			'INSERT INTO books_fts (rowid, title, author, publisher, description, isbn) SELECT id, title, author, publisher, description, isbn FROM books',
+		);
+		console.log('  FTS index populated.');
+
+		const bookCount =
+			(
+				db.prepare('SELECT MAX(rowid) as c FROM books').get() as {
+					c: number;
+				}
+			)?.c ?? 0;
+
 		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
 			'zlib3_imported_at',
 			new Date().toISOString(),
 		]);
 		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
 			'zlib3_count',
-			String(
-				(db.prepare('SELECT COUNT(*) as c FROM books').get() as { c: number })
-					?.c ?? 0,
-			),
+			String(bookCount),
 		]);
 
 		console.log(

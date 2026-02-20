@@ -116,35 +116,13 @@ async function importFile(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
 
-	const deleteFts = db.prepare('DELETE FROM goodreads_fts WHERE rowid = ?');
-	const insertFts = db.prepare(
-		'INSERT INTO goodreads_fts (rowid, title, author, description, genres, isbn) VALUES (?, ?, ?, ?, ?, ?)',
-	);
-	const findExisting = db.prepare(
-		'SELECT id FROM goodreads WHERE source_id = ?',
-	);
-
 	const BATCH_SIZE = 5000;
 	let batch: NewGoodreads[] = [];
 
+	// Insert rows without FTS — FTS is populated in bulk after import
 	const flush = db.transaction((rows: NewGoodreads[]) => {
 		for (const row of rows) {
-			const existing = findExisting.get(row.source_id) as
-				| { id: number }
-				| undefined;
-			if (existing) {
-				deleteFts.run(existing.id);
-			}
-			const result = upsert.run(...goodreadsToParams(row));
-			const rowid = result.lastInsertRowid;
-			insertFts.run(
-				rowid,
-				row.title,
-				row.author,
-				row.description,
-				row.genres,
-				row.isbn,
-			);
+			upsert.run(...goodreadsToParams(row));
 			upserted++;
 		}
 	});
@@ -256,19 +234,28 @@ export async function runImportGoodreads(opts?: {
 
 		db.run('CREATE INDEX IF NOT EXISTS idx_goodreads_isbn ON goodreads(isbn)');
 
+		// Populate FTS in bulk (much safer than per-row inserts during import)
+		console.log('  Populating FTS index...');
+		db.run('DELETE FROM goodreads_fts');
+		db.run(
+			'INSERT INTO goodreads_fts (rowid, title, author, description, genres, isbn) SELECT id, title, author, description, genres, isbn FROM goodreads',
+		);
+		console.log('  FTS index populated.');
+
+		const grCount =
+			(
+				db.prepare('SELECT MAX(rowid) as c FROM goodreads').get() as {
+					c: number;
+				}
+			)?.c ?? 0;
+
 		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
 			'goodreads_imported_at',
 			new Date().toISOString(),
 		]);
 		db.run('INSERT OR REPLACE INTO import_meta (key, value) VALUES (?, ?)', [
 			'goodreads_count',
-			String(
-				(
-					db.prepare('SELECT COUNT(*) as c FROM goodreads').get() as {
-						c: number;
-					}
-				)?.c ?? 0,
-			),
+			String(grCount),
 		]);
 
 		console.log(

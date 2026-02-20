@@ -22,6 +22,7 @@ services:
     container_name: anna-api
     volumes:
       - ./data:/data
+      - anna-db:/data/db
     environment:
       DB_PATH: "/data/db/anna.db"
       PORT: "${PORT:-3100}"
@@ -41,3 +42,5 @@ services:
     depends_on:
       - aria2
 
+volumes:
+  anna-db:
