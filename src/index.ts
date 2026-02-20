@@ -13,7 +13,7 @@ const app = new Hono();
 app.route('/', searchRoutes(db, raw));
 app.route('/', similarRoutes(db, raw));
 app.route('/', lookupRoutes(db));
-app.route('/', statsRoutes(db));
+app.route('/', statsRoutes(raw));
 app.route('/', downloadRoutes());
 mcpRoutes(app);
 

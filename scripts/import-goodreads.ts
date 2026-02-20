@@ -167,6 +167,8 @@ async function importFile(
 			if (batch.length >= BATCH_SIZE) {
 				flush(batch);
 				count += batch.length;
+				// Yield to event loop so the HTTP server can handle requests
+				await Bun.sleep(0);
 				batch = [];
 				if (count % 100_000 === 0) {
 					const elapsed = (Date.now() - startTime) / 1000;

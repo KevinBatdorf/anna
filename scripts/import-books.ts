@@ -174,6 +174,8 @@ async function importFile(
 				flush(batch);
 				count += batch.length;
 				batch = [];
+				// Yield to event loop so the HTTP server can handle requests
+				await Bun.sleep(0);
 				if (count % 100_000 === 0) {
 					const elapsed = (Date.now() - startTime) / 1000;
 					const rate = Math.round(count / elapsed);

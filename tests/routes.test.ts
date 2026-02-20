@@ -187,7 +187,7 @@ function createTestApp() {
 	app.route('/', searchRoutes(db, sqlite));
 	app.route('/', similarRoutes(db, sqlite));
 	app.route('/', lookupRoutes(db));
-	app.route('/', statsRoutes(db));
+	app.route('/', statsRoutes(sqlite));
 	app.get('/', (c) => c.json({ name: 'test' }));
 	app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
