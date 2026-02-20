@@ -30,6 +30,7 @@ The updater checks for new data daily but won't download more than once every 30
 | `GET /lookup/isbn?isbn=...` | Look up by ISBN (books + Goodreads) |
 | `GET /download?md5=...` | Get download URL (requires `ANNAS_API_KEY`) |
 | `GET /stats` | Database stats and import info |
+| `POST /mcp` | MCP protocol endpoint (JSON-RPC 2.0) |
 
 `/search` supports `?ext=pdf` to filter by format and `?dedupe=false` to show all formats (default deduplicates by title+author, keeping PDF > epub > other). `/similar` supports `?min_rating=` and `?min_reviews=` to filter by quality.
 
@@ -41,7 +42,25 @@ For better search quality, you can enable vector embeddings powered by [Ollama](
 
 You can add `OLLAMA_URL` at any time — even after the initial data import. The updater checks every 24 hours and will start embedding automatically on its next cycle. To start immediately, restart the updater: `docker compose restart updater`.
 
-**Heads up:** The initial embedding of the full Goodreads catalog (~11M records) will roughly double your database size and takes a while — expect 1-2 weeks depending on your hardware. Subsequent updates only embed new records, so after the first run it stays quick. You can set `LIMIT=1000` in `.env` to embed a small batch first and verify everything works before committing to the full run.
+**Heads up:** The initial embedding of the full Goodreads catalog (~11M records) will roughly double your database size and takes a while — speed depends entirely on your GPU. On an RTX 4090 it takes about 21 hours (~149 records/sec); slower hardware could take days or weeks. Subsequent updates only embed new records, so after the first run it stays quick. You can set `LIMIT=1000` in `.env` to embed a small batch first and verify everything works before committing to the full run.
+
+## MCP Server
+
+The API includes a built-in [MCP](https://modelcontextprotocol.io) endpoint at `POST /mcp`, so any MCP-compatible client (Claude Desktop, Claude Code, etc.) can use it as a tool server.
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "anna": {
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+Available tools: `search_books`, `search_goodreads`, `find_similar`, `lookup_isbn`, `lookup_md5`, `get_stats`. Hit `GET /mcp` for a quick summary.
 
 ## Claude Code Plugin
 

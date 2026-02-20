@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { db, raw } from './db';
 import { downloadRoutes } from './routes/download';
 import { lookupRoutes } from './routes/lookup';
+import { mcpRoutes } from './routes/mcp';
 import { searchRoutes } from './routes/search';
 import { similarRoutes } from './routes/similar';
 import { statsRoutes } from './routes/stats';
@@ -13,6 +14,7 @@ app.route('/', similarRoutes(db, raw));
 app.route('/', lookupRoutes(db));
 app.route('/', statsRoutes(db));
 app.route('/', downloadRoutes());
+mcpRoutes(app);
 
 app.get('/', (c) =>
 	c.json({
@@ -25,6 +27,7 @@ app.get('/', (c) =>
 			'GET /lookup/isbn?isbn=...',
 			'GET /download?md5=...',
 			'GET /stats',
+			'POST /mcp (MCP protocol endpoint)',
 		],
 	}),
 );
