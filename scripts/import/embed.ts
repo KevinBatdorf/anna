@@ -48,6 +48,49 @@ const saveEmbeddingCache = async (sql: postgres.Sql) => {
 	}
 };
 
+/** Retry embedding for any rows with embedding IS NULL using progressively shorter text. */
+const retryMissing = async (sql: postgres.Sql, log: (msg: string) => void) => {
+	const missingRows = await sql`
+		SELECT id, title, author, description, genres
+		FROM goodreads
+		WHERE embedding IS NULL
+		ORDER BY id ASC
+		LIMIT 1000`;
+
+	if (missingRows.length === 0) return;
+
+	log(`Retry pass: ${missingRows.length} rows still missing embeddings`);
+	let retried = 0;
+	for (const r of missingRows) {
+		const text = composeEmbedText({
+			title: (r.title as string) || '',
+			author: (r.author as string) || '',
+			description: (r.description as string) || '',
+			genres: (r.genres as string) || '',
+		});
+		let vec: Float32Array | null = null;
+		for (const maxLen of [text.length, 1500, 800, 400]) {
+			try {
+				[vec] = await embed([text.slice(0, maxLen)]);
+				break;
+			} catch {
+				// try shorter
+			}
+		}
+		if (vec) {
+			const vecStr = `[${[...vec].join(',')}]`;
+			await sql`UPDATE goodreads SET embedding = ${vecStr}::vector WHERE id = ${r.id}`;
+			retried++;
+		} else {
+			log(
+				`  Permanently skipped id=${r.id} "${r.title}" (too long even at 400 chars)`,
+			);
+		}
+	}
+	if (retried > 0)
+		log(`Retry pass: embedded ${retried} previously-skipped rows`);
+};
+
 export const runEmbedGoodreads = async (opts: {
 	sql: postgres.Sql;
 	limit?: number;
@@ -135,6 +178,8 @@ export const runEmbedGoodreads = async (opts: {
 
 	if (estimatedRemaining <= 0) {
 		log('Embeddings: all records already embedded.');
+		await retryMissing(sql, log);
+		await saveEmbeddingCache(sql);
 		return;
 	}
 
@@ -239,46 +284,6 @@ export const runEmbedGoodreads = async (opts: {
 	const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
 	log(`Embeddings done: ${embedded.toLocaleString()} records in ${elapsed}s`);
 
-	// --- Retry pass: pick up any rows that were skipped (embedding IS NULL) ---
-	const missingRows = await sql`
-		SELECT id, title, author, description, genres
-		FROM goodreads
-		WHERE embedding IS NULL
-		ORDER BY id ASC
-		LIMIT 1000`;
-
-	if (missingRows.length > 0) {
-		log(`Retry pass: ${missingRows.length} rows still missing embeddings`);
-		let retried = 0;
-		for (const r of missingRows) {
-			const text = composeEmbedText({
-				title: (r.title as string) || '',
-				author: (r.author as string) || '',
-				description: (r.description as string) || '',
-				genres: (r.genres as string) || '',
-			});
-			let vec: Float32Array | null = null;
-			for (const maxLen of [text.length, 1500, 800, 400]) {
-				try {
-					[vec] = await embed([text.slice(0, maxLen)]);
-					break;
-				} catch {
-					// try shorter
-				}
-			}
-			if (vec) {
-				const vecStr = `[${[...vec].join(',')}]`;
-				await sql`UPDATE goodreads SET embedding = ${vecStr}::vector WHERE id = ${r.id}`;
-				retried++;
-			} else {
-				log(
-					`  Permanently skipped id=${r.id} "${r.title}" (too long even at 400 chars)`,
-				);
-			}
-		}
-		if (retried > 0)
-			log(`Retry pass: embedded ${retried} previously-skipped rows`);
-	}
-
+	await retryMissing(sql, log);
 	await saveEmbeddingCache(sql);
 };

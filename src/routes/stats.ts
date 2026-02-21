@@ -32,15 +32,14 @@ export function statsRoutes(raw: postgres.Sql) {
 					.map((m) => [m.key, m.value]),
 			);
 
-			// Postgres handles concurrent reads fine — no need for max(rowid) hack
-			const [{ c: bookCount }] = await raw`SELECT COUNT(*) as c FROM books`;
+			// MAX(id) hits the PK index — instant even during active imports
+			const [{ c: bookCount }] =
+				await raw`SELECT COALESCE(MAX(id), 0) as c FROM books`;
 			const [{ c: goodreadsCount }] =
-				await raw`SELECT COUNT(*) as c FROM goodreads`;
+				await raw`SELECT COALESCE(MAX(id), 0) as c FROM goodreads`;
 
-			const [{ c: embeddingsCount }] =
-				await raw`SELECT COUNT(*) as c FROM goodreads WHERE embedding IS NOT NULL`;
-			const embCount = Number(embeddingsCount);
 			const grCount = Number(goodreadsCount);
+			const embCount = Number(metaObj.embeddings_last_id ?? 0);
 			const progress =
 				grCount > 0 && embCount > 0
 					? Math.round((embCount / grCount) * 1000) / 10
