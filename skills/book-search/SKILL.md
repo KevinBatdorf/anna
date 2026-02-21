@@ -17,7 +17,7 @@ The API runs locally. Default: `http://localhost:3100`
 |---|---|
 | `GET /search?q=...&limit=20&offset=0&ext=&dedupe=true` | Full-text search across Zlib3 book records |
 | `GET /search/goodreads?q=...&limit=20&offset=0` | Search Goodreads ratings & reviews |
-| `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Semantic book discovery with availability |
+| `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Similar books via vector search (ISBN or exact title) |
 | `GET /lookup/md5?md5=...` | Look up a book by MD5 hash |
 | `GET /lookup/isbn?isbn=...` | Look up by ISBN (returns both book file + Goodreads data) |
 | `GET /download?md5=...` | Get download URL (proxies Anna's Archive API) |
@@ -42,14 +42,26 @@ For Goodreads data specifically: `GET /search/goodreads?q=<query>` — returns t
 ### Similar
 
 ```
-GET /similar?q=<query>&limit=10&min_rating=0&min_reviews=0
+GET /similar?q=<isbn_or_title>&limit=10&min_rating=0&min_reviews=0
 ```
 
-Semantic book discovery via vector search. If the query matches a known book title, uses that book's description and genres as the search vector (and includes a `source` field in the response). Otherwise, embeds the raw query text directly. Each result includes a `similarity` score (0-1, higher = more similar) and an `available` field with the matching Zlib3 file (by ISBN), or `null`. Returns `503` if vector search is not configured.
+Find books similar to a given book using vector embeddings. The `q` parameter accepts an **ISBN** (preferred) or an **exact book title**.
+
+**How matching works:**
+- **ISBN** (10-13 digits): Direct lookup — fastest and most reliable
+- **Title**: FTS search + strict word-level matching against the main title (before any `:` subtitle). The query words must cover at least 60% of the title words. Partial or vague titles will return `found: false`.
+
+**Best practice:** Always pass an ISBN when available. Title matching is strict by design (this API is built for AI agents, not fuzzy human queries).
+
+**Response shape:**
+- `found: true` — matched a Goodreads entry. Returns `source` (the matched book) and `results` (similar books). Each result has `similarity` (0-1) and `available` (true/false for downloadable copies).
+- `found: false` — no Goodreads match. May include a `download` object if the book exists in the books table (Zlib3).
 
 Optional parameters:
 - `min_rating` — minimum Goodreads rating (e.g. `min_rating=3.5`). Default: `0` (no filter).
 - `min_reviews` — minimum number of ratings (e.g. `min_reviews=100`). Default: `0` (no filter).
+
+Returns `503` if vector search is not configured.
 
 ### Lookup
 
@@ -71,9 +83,9 @@ The response includes `account_fast_download_info` with `downloads_left`, `downl
 | User intent | Endpoint | Why |
 |---|---|---|
 | Specific title/author ("Do you have Dune?") | `/search` | FTS keyword match, returns downloadable files |
-| Topical discovery ("books about stoicism") | `/similar` | Semantic vec search + availability |
+| Topical discovery ("books about stoicism") | `/search/goodreads` | Semantic vec search across Goodreads catalog |
 | Quality picks ("recommend a sci-fi book") | `/similar` with `min_rating=3.5&min_reviews=100` | Vec search + rating filter |
-| Similar books ("books like Project Hail Mary") | `/similar` | Looks up the book, then finds similar by description |
+| Similar books ("books like Project Hail Mary") | `/similar?q=<isbn>` | ISBN gives best match; falls back to title |
 | Rating/metadata lookup | `/lookup/isbn` or `/lookup/md5` | Direct lookup by identifier |
 
 ## Agent Workflows
@@ -85,23 +97,25 @@ The response includes `account_fast_download_info` with `downloads_left`, `downl
 3. Report format, size, and rating
 4. If user wants a different format, use `dedupe=false` to see all available formats
 
-### "Find me a good science fiction book"
-
-1. Call `/similar?q=science+fiction&min_rating=3.5&min_reviews=100`
-2. Present top results with ratings and availability
-3. If user wants a file, call `/download?md5=<hash>` using the `available` field's md5
-
 ### "Find me books like Project Hail Mary"
 
-1. Call `/similar?q=project+hail+mary`
-2. Results include a `source` field (the matched book) and semantically similar books
-3. If user wants a file, use the `available` field's md5 with `/download`
+1. Call `/lookup/isbn?isbn=<isbn>` or `/search/goodreads?q=project+hail+mary` to get the ISBN
+2. Call `/similar?q=<isbn>` — ISBN gives the most reliable match
+3. If no ISBN available, fall back to `/similar?q=project+hail+mary` (exact title match required)
+4. Results include a `source` field (the matched book) and semantically similar books with `available: true/false`
+5. If user wants a file and `available` is true, look up the ISBN via `/lookup/isbn` then `/download?md5=<hash>`
+
+### "Find me a good science fiction book"
+
+1. Call `/search/goodreads?q=science+fiction` for semantic search across the catalog
+2. Present top results with ratings
+3. For similar-to recommendations, pick a book and call `/similar?q=<isbn>`
 
 ### "Books about stoicism" (topical/vague query)
 
-1. Call `/similar?q=books+about+stoicism`
-2. Each result includes an `available` field with the downloadable book (if found by ISBN)
-3. If user wants a file, call `/download?md5=<hash>` with the `available` field's md5
+1. Call `/search/goodreads?q=stoicism` — uses vector search for semantic matching
+2. Present results with ratings and descriptions
+3. Do NOT use `/similar` for vague queries — it requires an exact book title or ISBN
 
 ### "What's the rating for this book?" (given an MD5)
 

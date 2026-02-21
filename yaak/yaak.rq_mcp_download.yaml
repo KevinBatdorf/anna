@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_mcp_download
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: fl_mcp
+authentication: {}
+authenticationType: null
+body:
+  text: |
+    {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "tools/call",
+      "params": {
+        "name": "get_download_url",
+        "arguments": {
+          "md5": "21f19f95c4b969d06fe5860a98e29f0d"
+        }
+      }
+    }
+bodyType: application/json
+description: 'JSON-RPC: call get_download_url tool'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: mcp_dl_ct
+method: POST
+name: 'MCP: get_download_url'
+sortPriority: 3.0
+url: ${[ baseUrl ]}/mcp
+urlParameters: []

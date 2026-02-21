@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_mcp_tools
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-20T00:00:00
+workspaceId: ws_anna
+folderId: fl_mcp
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: List available MCP tools (human-readable summary)
+headers: []
+method: GET
+name: 'MCP: tools (GET summary)'
+sortPriority: -1.0
+url: ${[ baseUrl ]}/mcp
+urlParameters:
+- enabled: true
+  name: ''
+  value: ''
+  id: mcp_empty

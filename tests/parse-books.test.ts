@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBook } from '../src/lib/parse-books';
+import { parseBook } from '../scripts/import/books';
 
 const SAMPLE_LINE = JSON.stringify({
 	aacid:
@@ -96,12 +96,12 @@ describe('parseBook', () => {
 		expect(row?.isbn).toBe('978OLD');
 	});
 
-	it('returns null for invalid JSON', () => {
-		expect(parseBook('not json')).toBeNull();
+	it('throws on invalid JSON', () => {
+		expect(() => parseBook('not json')).toThrow();
 	});
 
-	it('returns null for empty string', () => {
-		expect(parseBook('')).toBeNull();
+	it('throws on empty string', () => {
+		expect(() => parseBook('')).toThrow();
 	});
 
 	it('handles missing metadata fields gracefully', () => {

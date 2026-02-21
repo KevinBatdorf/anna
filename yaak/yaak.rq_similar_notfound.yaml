@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_similar_notfound
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Similar with a title not in Goodreads (expect found:false + download fallback)
+headers: []
+method: GET
+name: Similar (not found)
+sortPriority: 2.75
+url: ${[ baseUrl ]}/similar
+urlParameters:
+- enabled: true
+  name: q
+  value: project hail mary
+  id: snf_q
+- enabled: true
+  name: limit
+  value: '10'
+  id: snf_limit

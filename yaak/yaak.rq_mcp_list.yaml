@@ -1,0 +1,29 @@
+type: http_request
+model: http_request
+id: rq_mcp_list
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: fl_mcp
+authentication: {}
+authenticationType: null
+body:
+  text: |
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {}
+    }
+bodyType: application/json
+description: 'JSON-RPC: list all MCP tools with full schemas'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: mcp_list_ct
+method: POST
+name: 'MCP: tools/list'
+sortPriority: 0.0
+url: ${[ baseUrl ]}/mcp
+urlParameters: []

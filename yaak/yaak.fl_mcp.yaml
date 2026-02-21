@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_mcp
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: MCP
+sortPriority: 2.0

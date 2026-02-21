@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_search_books_pdf
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-20T00:00:00
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Search books filtered by PDF format only
+headers: []
+method: GET
+name: Search Books (PDF only)
+sortPriority: 0.5
+url: ${[ baseUrl ]}/search
+urlParameters:
+- enabled: true
+  name: q
+  value: dune frank herbert
+  id: pdf_q
+- enabled: true
+  name: ext
+  value: pdf
+  id: pdf_ext
+- enabled: true
+  name: limit
+  value: '10'
+  id: pdf_limit
+- enabled: true
+  name: ''
+  value: ''
+  id: pdf_empty

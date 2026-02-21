@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGoodreads, xmlTag } from '../src/lib/parse-goodreads';
+import { parseGoodreads, xmlTag } from '../scripts/import/goodreads';
 
 // Real sample from the actual torrent data
 const SAMPLE_LINE = JSON.stringify({
@@ -144,8 +144,8 @@ describe('parseGoodreads', () => {
 		expect(parseGoodreads(line)).toBeNull();
 	});
 
-	it('returns null for invalid JSON', () => {
-		expect(parseGoodreads('not json')).toBeNull();
+	it('throws on invalid JSON', () => {
+		expect(() => parseGoodreads('not json')).toThrow();
 	});
 
 	it('handles missing author gracefully', () => {

@@ -12,8 +12,8 @@
 
 - **Runtime**: Bun
 - **Framework**: Hono
-- **Database**: SQLite via Drizzle ORM + raw bun:sqlite
-- **Search**: FTS5 with Porter stemming, optional vector search via sqlite-vec + Ollama
+- **Database**: PostgreSQL 17 via Drizzle ORM + raw postgres.js
+- **Search**: Postgres FTS with weighted tsvector (generated columns + GIN indexes), optional vector search via pgvector + Ollama
 - **Linter**: Biome (tabs, single quotes, Bun globals)
 
 ## Project Structure
@@ -41,8 +41,8 @@ When asked for status, run these and report the results:
 
 ## Conventions
 
-- All search queries go through `sanitizeFtsQuery()` before hitting FTS5
+- FTS uses `plainto_tsquery('english', q)` — no sanitization needed, Postgres handles it safely
 - Book search deduplicates by title+author, preferring PDF > epub > other
-- Vector search is opt-in (requires `OLLAMA_URL` env var)
-- Docker runs Debian (not Alpine) because sqlite-vec needs glibc
+- Vector search is opt-in (requires `OLLAMA_URL` env var), embeddings stored directly on goodreads table via pgvector
+- Tests require a running Postgres instance (use `docker compose up -d postgres`)
 - When creating or changing API endpoints, update the Yaak workspace in `yaak/` to match

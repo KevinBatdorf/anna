@@ -1,7 +1,7 @@
-import { Database } from 'bun:sqlite';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { Hono } from 'hono';
-import { beforeAll, describe, expect, it } from 'vitest';
+import postgres from 'postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/db/schema';
 import { downloadRoutes } from '../src/routes/download';
 import { lookupRoutes } from '../src/routes/lookup';
@@ -10,118 +10,81 @@ import { searchRoutes } from '../src/routes/search';
 import { similarRoutes } from '../src/routes/similar';
 import { statsRoutes } from '../src/routes/stats';
 
-function createTestApp() {
-	const sqlite = new Database(':memory:');
+const TEST_DB_URL =
+	process.env.DATABASE_URL || 'postgres://anna:anna@localhost:5432/anna';
+const TEST_SCHEMA = `test_mcp_${Date.now()}`;
 
-	sqlite.run(`CREATE TABLE books (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL, source_id TEXT, title TEXT, author TEXT,
-    publisher TEXT, language TEXT, year TEXT, extension TEXT,
-    filesize INTEGER, pages TEXT, description TEXT, md5 TEXT,
-    isbn TEXT, series TEXT, edition TEXT
-  )`);
-	sqlite.run(`CREATE VIRTUAL TABLE books_fts USING fts5(
-    title, author, publisher, description, isbn, content=books, content_rowid=id,
-    tokenize='porter unicode61'
-  )`);
-	sqlite.run(`CREATE TABLE goodreads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id TEXT, title TEXT, author TEXT, rating REAL,
-    ratings_count INTEGER, description TEXT, genres TEXT,
-    isbn TEXT, pages TEXT, year TEXT
-  )`);
-	sqlite.run(`CREATE VIRTUAL TABLE goodreads_fts USING fts5(
-    title, author, description, genres, isbn, content=goodreads, content_rowid=id,
-    tokenize='porter unicode61'
-  )`);
-	sqlite.run(`CREATE TABLE import_meta (key TEXT PRIMARY KEY, value TEXT)`);
+let sql: ReturnType<typeof postgres>;
+let app: Hono;
 
-	const insertBook = sqlite.prepare(
-		`INSERT INTO books (source, source_id, title, author, publisher, language, year, extension, filesize, pages, description, md5, isbn, series, edition)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-	);
-	const insertBookFts = sqlite.prepare(
-		`INSERT INTO books_fts (rowid, title, author, publisher, description, isbn) VALUES (?, ?, ?, ?, ?, ?)`,
-	);
+beforeAll(async () => {
+	sql = postgres(TEST_DB_URL, { max: 5 });
 
-	const book1 = insertBook.run(
-		'zlib3',
-		'123',
-		'The Hobbit',
-		'J.R.R. Tolkien',
-		'Allen & Unwin',
-		'en',
-		'1937',
-		'epub',
-		500000,
-		'310',
-		'A fantasy novel',
-		'abc123md5',
-		'9780261103344',
-		'Middle-earth',
-		'1st',
-	);
-	insertBookFts.run(
-		book1.lastInsertRowid,
-		'The Hobbit',
-		'J.R.R. Tolkien',
-		'Allen & Unwin',
-		'A fantasy novel',
-		'9780261103344',
-	);
+	// Create isolated schema for this test run
+	await sql`CREATE SCHEMA ${sql(TEST_SCHEMA)}`;
+	await sql`CREATE EXTENSION IF NOT EXISTS vector`;
+	await sql`SET search_path TO ${sql(TEST_SCHEMA)}, public`;
 
-	const insertGr = sqlite.prepare(
-		`INSERT INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-	);
-	const insertGrFts = sqlite.prepare(
-		`INSERT INTO goodreads_fts (rowid, title, author, description, genres, isbn) VALUES (?, ?, ?, ?, ?, ?)`,
-	);
-	const gr1 = insertGr.run(
-		'gr1',
-		'The Hobbit',
-		'J.R.R. Tolkien',
-		4.28,
-		3500000,
-		"Bilbo's adventure",
-		'Fantasy,Adventure',
-		'9780261103344',
-		'310',
-		'1937',
-	);
-	insertGrFts.run(
-		gr1.lastInsertRowid,
-		'The Hobbit',
-		'J.R.R. Tolkien',
-		"Bilbo's adventure",
-		'Fantasy,Adventure',
-		'9780261103344',
-	);
+	// Create tables
+	await sql`CREATE TABLE books (
+		id SERIAL PRIMARY KEY,
+		source TEXT NOT NULL, source_id TEXT UNIQUE, title TEXT, author TEXT,
+		publisher TEXT, language TEXT, year TEXT, extension TEXT,
+		filesize INTEGER, pages TEXT, description TEXT, md5 TEXT,
+		isbn TEXT, series TEXT, edition TEXT,
+		search tsvector GENERATED ALWAYS AS (
+			setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+			setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
+			setweight(to_tsvector('english', coalesce(publisher, '')), 'C') ||
+			setweight(to_tsvector('english', coalesce(description, '')), 'D') ||
+			to_tsvector('english', coalesce(isbn, ''))
+		) STORED
+	)`;
+	await sql`CREATE INDEX ON books USING gin(search)`;
 
-	sqlite.run(
-		`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '1')`,
-	);
-	sqlite.run(
-		`INSERT INTO import_meta (key, value) VALUES ('goodreads_count', '1')`,
-	);
+	await sql`CREATE TABLE goodreads (
+		id SERIAL PRIMARY KEY,
+		source_id TEXT UNIQUE, title TEXT, author TEXT, rating REAL,
+		ratings_count INTEGER, description TEXT, genres TEXT,
+		isbn TEXT, pages TEXT, year TEXT,
+		embedding vector(768),
+		search tsvector GENERATED ALWAYS AS (
+			setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+			setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
+			setweight(to_tsvector('english', coalesce(description, '')), 'C') ||
+			setweight(to_tsvector('english', coalesce(genres, '')), 'D') ||
+			to_tsvector('english', coalesce(isbn, ''))
+		) STORED
+	)`;
+	await sql`CREATE INDEX ON goodreads USING gin(search)`;
 
-	const db = drizzle(sqlite, { schema });
+	await sql`CREATE TABLE import_meta (key TEXT PRIMARY KEY, value TEXT)`;
 
-	const app = new Hono();
-	app.route('/', searchRoutes(db, sqlite));
-	app.route('/', similarRoutes(db, sqlite));
+	// Seed data
+	await sql`INSERT INTO books (source, source_id, title, author, publisher, language, year, extension, filesize, pages, description, md5, isbn, series, edition)
+		VALUES ('zlib3', '123', 'The Hobbit', 'J.R.R. Tolkien', 'Allen & Unwin', 'en', '1937', 'epub', 500000, '310', 'A fantasy novel', 'abc123md5', '9780261103344', 'Middle-earth', '1st')`;
+
+	await sql`INSERT INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
+		VALUES ('gr1', 'The Hobbit', 'J.R.R. Tolkien', 4.28, 3500000, 'Bilbo''s adventure', 'Fantasy,Adventure', '9780261103344', '310', '1937')`;
+
+	await sql`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '1')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('goodreads_count', '1')`;
+
+	const db = drizzle(sql, { schema });
+
+	app = new Hono();
+	app.route('/', searchRoutes(db, sql));
+	app.route('/', similarRoutes(db, sql));
 	app.route('/', lookupRoutes(db));
-	app.route('/', statsRoutes(sqlite));
+	app.route('/', statsRoutes(sql));
 	app.route('/', downloadRoutes());
 	mcpRoutes(app);
 	app.notFound((c) => c.json({ error: 'Not found' }, 404));
+});
 
-	return app;
-}
-
-let app: Hono;
-beforeAll(() => {
-	app = createTestApp();
+afterAll(async () => {
+	await sql`DROP SCHEMA IF EXISTS ${sql(TEST_SCHEMA)} CASCADE`;
+	await sql.end();
 });
 
 /** Send a JSON-RPC 2.0 request to POST /mcp */
@@ -223,14 +186,17 @@ describe('POST /mcp — tools/call', () => {
 		expect(data.error).toBeDefined();
 	});
 
-	it('find_similar returns 503 when vec search is unavailable', async () => {
-		const { body } = await rpc('tools/call', {
-			name: 'find_similar',
-			arguments: { query: 'hobbit' },
-		});
-		const data = JSON.parse(body.result.content[0].text);
-		expect(data.error).toContain('Vector search not available');
-	});
+	it.skipIf(!!process.env.OLLAMA_URL)(
+		'find_similar returns 503 when vec search is unavailable',
+		async () => {
+			const { body } = await rpc('tools/call', {
+				name: 'find_similar',
+				arguments: { query: 'hobbit' },
+			});
+			const data = JSON.parse(body.result.content[0].text);
+			expect(data.error).toContain('Vector search not available');
+		},
+	);
 });
 
 describe('POST /mcp — error handling', () => {

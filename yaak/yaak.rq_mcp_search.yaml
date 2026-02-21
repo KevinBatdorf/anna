@@ -1,0 +1,35 @@
+type: http_request
+model: http_request
+id: rq_mcp_search
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: fl_mcp
+authentication: {}
+authenticationType: null
+body:
+  text: |
+    {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "tools/call",
+      "params": {
+        "name": "search_books",
+        "arguments": {
+          "query": "dune frank herbert",
+          "limit": 5
+        }
+      }
+    }
+bodyType: application/json
+description: 'JSON-RPC: call search_books tool'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: mcp_sb_ct
+method: POST
+name: 'MCP: search_books'
+sortPriority: 2.0
+url: ${[ baseUrl ]}/mcp
+urlParameters: []

@@ -2,8 +2,10 @@ FROM oven/bun:debian
 
 WORKDIR /app
 
-# Install zstd for data decompression during imports
-RUN apt-get update -qq && apt-get install -yqq zstd >/dev/null 2>&1 && rm -rf /var/lib/apt/lists/*
+# Install supercronic (cron for containers)
+RUN apt-get update -qq && apt-get install -yqq curl >/dev/null 2>&1 && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-amd64 -o /usr/local/bin/supercronic \
+    && chmod +x /usr/local/bin/supercronic
 
 # Copy package files and install dependencies (Linux-native)
 COPY package.json bun.lock* ./

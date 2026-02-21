@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeEmbedText } from '../scripts/embed-goodreads';
+import { composeEmbedText } from '../src/lib/vec-search';
 
 describe('composeEmbedText', () => {
 	it('joins title, author, description, genres', () => {

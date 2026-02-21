@@ -1,0 +1,35 @@
+type: http_request
+model: http_request
+id: rq_mcp_find_similar
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T00:00:00
+workspaceId: ws_anna
+folderId: fl_mcp
+authentication: {}
+authenticationType: null
+body:
+  text: |
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "find_similar",
+        "arguments": {
+          "query": "9781624301001",
+          "limit": 5
+        }
+      }
+    }
+bodyType: application/json
+description: 'JSON-RPC: call find_similar tool (ISBN example)'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: mcp_fs_ct
+method: POST
+name: 'MCP: find_similar'
+sortPriority: 1.0
+url: ${[ baseUrl ]}/mcp
+urlParameters: []

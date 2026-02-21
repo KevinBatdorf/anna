@@ -1,31 +1,19 @@
-import type { Database } from 'bun:sqlite';
 import { Hono } from 'hono';
+import type postgres from 'postgres';
 
-/** Fast approximate row count using max(rowid). Doesn't block on write locks. */
-function approxCount(raw: Database, table: string): number {
-	try {
-		const row = raw.prepare(`SELECT MAX(rowid) as c FROM ${table}`).get() as {
-			c: number;
-		} | null;
-		return row?.c ?? 0;
-	} catch {
-		return 0;
-	}
-}
-
-export function statsRoutes(raw: Database) {
+export function statsRoutes(raw: postgres.Sql) {
 	const app = new Hono();
 
-	app.get('/stats', (c) => {
+	app.get('/stats', async (c) => {
 		try {
 			// Check if import_meta table exists (may not on fresh DB)
-			const tableExists = raw
-				.prepare(
-					"SELECT name FROM sqlite_master WHERE type='table' AND name='import_meta'",
-				)
-				.get();
+			const tableCheck = await raw`
+				SELECT EXISTS (
+					SELECT 1 FROM information_schema.tables
+					WHERE table_name = 'import_meta'
+				) as exists`;
 
-			if (!tableExists) {
+			if (!tableCheck[0]?.exists) {
 				return c.json({
 					books: 0,
 					goodreads: 0,
@@ -37,36 +25,36 @@ export function statsRoutes(raw: Database) {
 				});
 			}
 
-			const meta = raw.prepare('SELECT key, value FROM import_meta').all() as {
-				key: string;
-				value: string;
-			}[];
+			const meta = await raw`SELECT key, value FROM import_meta`;
 			const metaObj = Object.fromEntries(
 				meta
 					.filter((m) => m.key !== 'embeddings_count')
 					.map((m) => [m.key, m.value]),
 			);
 
-			// Use max(rowid) for fast approximate counts that don't block imports
-			const bookCount = approxCount(raw, 'books');
-			const goodreadsCount = approxCount(raw, 'goodreads');
+			// Postgres handles concurrent reads fine — no need for max(rowid) hack
+			const [{ c: bookCount }] = await raw`SELECT COUNT(*) as c FROM books`;
+			const [{ c: goodreadsCount }] =
+				await raw`SELECT COUNT(*) as c FROM goodreads`;
 
-			const lastId = Number(metaObj.embeddings_last_id ?? 0);
+			const [{ c: embeddingsCount }] =
+				await raw`SELECT COUNT(*) as c FROM goodreads WHERE embedding IS NOT NULL`;
+			const embCount = Number(embeddingsCount);
+			const grCount = Number(goodreadsCount);
 			const progress =
-				goodreadsCount > 0 && lastId > 0
-					? Math.round((lastId / goodreadsCount) * 1000) / 10
+				grCount > 0 && embCount > 0
+					? Math.round((embCount / grCount) * 1000) / 10
 					: 0;
 
 			return c.json({
-				books: bookCount,
-				goodreads: goodreadsCount,
-				embeddings: lastId,
+				books: Number(bookCount),
+				goodreads: grCount,
+				embeddings: embCount,
 				embeddings_model: metaObj.embeddings_model ?? null,
 				embeddings_progress: progress > 0 ? `${progress}%` : null,
 				import: metaObj,
 			});
 		} catch {
-			// DB may be locked during heavy imports — return safe defaults
 			return c.json({
 				books: 0,
 				goodreads: 0,
@@ -74,7 +62,7 @@ export function statsRoutes(raw: Database) {
 				embeddings_model: null,
 				embeddings_progress: null,
 				import: {},
-				status: 'importing',
+				status: 'starting',
 			});
 		}
 	});

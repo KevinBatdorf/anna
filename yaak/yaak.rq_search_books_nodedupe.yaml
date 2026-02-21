@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_search_books_nodedupe
+createdAt: 2026-02-20T00:00:00
+updatedAt: 2026-02-21T18:44:59.535543100
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Search books with deduplication disabled (show all formats)
+headers: []
+method: GET
+name: Search Books (no dedupe)
+sortPriority: 0.3
+url: ${[ baseUrl ]}/search
+urlParameters:
+- enabled: true
+  name: q
+  value: dune frank herbert
+  id: nd_q
+- enabled: true
+  name: dedupe
+  value: 'false'
+  id: nd_dedupe
+- enabled: true
+  name: limit
+  value: '20'
+  id: nd_limit
+- enabled: true
+  name: ''
+  value: ''
+  id: DZf6FqaGu8

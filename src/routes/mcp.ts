@@ -93,12 +93,12 @@ function registerTools(server: McpServer, app: Hono) {
 		{
 			title: 'Find Similar Books',
 			description:
-				"Find books similar to a given book using vector embeddings. Returns Goodreads entries ranked by similarity, with availability info from Anna's Archive when ISBN matches.",
+				'Find books similar to a given book using vector embeddings. Pass an ISBN for the most accurate match, or a book title. The title must closely match a Goodreads entry — partial or vague titles may return found:false. Returns Goodreads entries ranked by similarity, with available:true/false indicating downloadable copies.',
 			inputSchema: {
 				query: z
 					.string()
 					.describe(
-						'Book title, author, or description to find similar books for',
+						'ISBN (preferred, most accurate) or exact book title to find similar books for',
 					),
 				limit: z
 					.number()

@@ -17,30 +17,75 @@ services:
       - "6888:6888/udp"
     restart: unless-stopped
 
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: anna-postgres
+    environment:
+      POSTGRES_USER: anna
+      POSTGRES_PASSWORD: anna
+      POSTGRES_DB: anna
+    volumes:
+      - anna-pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    command: >
+      postgres
+        -c max_wal_size=4GB
+        -c checkpoint_timeout=30min
+        -c maintenance_work_mem=2GB
+        -c shared_buffers=1GB
+        -c effective_cache_size=3GB
+        -c work_mem=64MB
+    restart: unless-stopped
+
   api:
     build: .
     container_name: anna-api
-    volumes:
-      - ./data:/data
-      - anna-db:/data/db
     environment:
-      DB_PATH: "/data/db/anna.db"
+      DATABASE_URL: "postgres://anna:anna@anna-postgres:5432/anna"
       PORT: "${PORT:-3100}"
-      ANNAS_BASE_URL: "${ANNAS_BASE_URL:-https://annas-archive.li}"
       ANNAS_API_KEY: "${ANNAS_API_KEY:-}"
       OLLAMA_URL: "${OLLAMA_URL:-}"
       OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
-      UPDATE_INTERVAL_DAYS: "${UPDATE_INTERVAL_DAYS:-30}"
-      ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
-      ARIA2_SECRET: "anna"
-      DATA_DIR: "/data/torrents"
-      LIMIT: "${IMPORT_LIMIT:-0}"
     command: bun run /app/src/index.ts
     ports:
       - "${PORT:-3100}:${PORT:-3100}"
     restart: unless-stopped
     depends_on:
+      - postgres
+
+  updater:
+    build: .
+    container_name: anna-updater
+    volumes:
+      - ./data:/data
+    environment:
+      ANNAS_BASE_URL: "${ANNAS_BASE_URL:-https://annas-archive.li}"
+      ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
+      ARIA2_SECRET: "anna"
+      UPDATE_CRON: "${UPDATE_CRON:-0 0 * * *}"
+    command: sh -c 'echo "$$UPDATE_CRON bun run /app/scripts/download-torrents.ts" > /tmp/crontab && exec supercronic /tmp/crontab'
+    restart: unless-stopped
+    depends_on:
       - aria2
 
+  importer:
+    build: .
+    container_name: anna-importer
+    volumes:
+      - ./data:/data
+    environment:
+      DATABASE_URL: "postgres://anna:anna@anna-postgres:5432/anna"
+      DATA_DIR: "/data/torrents"
+      LOG_DIR: "/data"
+      OLLAMA_URL: "${OLLAMA_URL:-}"
+      OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
+      IMPORT_CRON: "${IMPORT_CRON:-0 * * * *}"
+    command: sh -c 'echo "$$IMPORT_CRON bun run /app/scripts/import/index.ts" > /tmp/crontab && exec supercronic /tmp/crontab'
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
 volumes:
-  anna-db:
+  anna-pgdata:

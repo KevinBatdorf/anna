@@ -21,11 +21,11 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
+		"@bokuweb/zstd-wasm": "^0.0.27",
 		"@modelcontextprotocol/sdk": "^1.26.0",
 		"drizzle-orm": "^0.45.1",
 		"hono": "^4.11.10",
-		"sqlite-vec": "^0.1.7-alpha.2",
-		"sqlite-vec-linux-x64": "^0.1.7-alpha.2",
+		"postgres": "^3.4.8",
 		"zod": "^4.3.6"
 	}
 }
