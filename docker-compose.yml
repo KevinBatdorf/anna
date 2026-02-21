@@ -65,7 +65,7 @@ services:
       ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
       ARIA2_SECRET: "anna"
       UPDATE_CRON: "${UPDATE_CRON:-0 0 * * *}"
-    command: sh -c 'echo "$$UPDATE_CRON bun run /app/scripts/download-torrents.ts" > /tmp/crontab && exec supercronic /tmp/crontab'
+    command: sh -c 'echo "$$UPDATE_CRON /usr/local/bin/bun run /app/scripts/download-torrents.ts" > /tmp/crontab && exec /usr/local/bin/supercronic /tmp/crontab'
     restart: unless-stopped
     depends_on:
       - aria2
@@ -82,7 +82,7 @@ services:
       OLLAMA_URL: "${OLLAMA_URL:-}"
       OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
       IMPORT_CRON: "${IMPORT_CRON:-0 * * * *}"
-    command: sh -c 'echo "$$IMPORT_CRON bun run /app/scripts/import/index.ts" > /tmp/crontab && exec supercronic /tmp/crontab'
+    command: sh -c 'echo "$$IMPORT_CRON /usr/local/bin/bun run /app/scripts/import/index.ts" > /tmp/crontab && exec /usr/local/bin/supercronic /tmp/crontab'
     restart: unless-stopped
     depends_on:
       - postgres

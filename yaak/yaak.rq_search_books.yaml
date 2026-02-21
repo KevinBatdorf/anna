@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_search_books
 createdAt: 2026-02-20T00:00:00
-updatedAt: 2026-02-20T06:26:58.607542700
+updatedAt: 2026-02-21T19:53:13.324035400
 workspaceId: ws_anna
 folderId: fl_search
 authentication: {}
@@ -31,4 +31,4 @@ urlParameters:
 - enabled: true
   name: ''
   value: ''
-  id: HE9xkq8IzE
+  id: Gg4pUFUg7K
