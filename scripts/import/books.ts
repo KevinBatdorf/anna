@@ -28,28 +28,36 @@ export const parseBook = (line: string): NewBook => {
 	};
 };
 
-const insertBooks = (db: PostgresJsDatabase, batch: NewBook[]) =>
-	db
+const insertBooks = (
+	db: PostgresJsDatabase,
+	batch: NewBook[],
+	resume: boolean,
+) => {
+	const values = batch.map((b) => ({
+		source: b.source,
+		source_id: b.source_id,
+		title: clean(b.title),
+		author: clean(b.author),
+		publisher: clean(b.publisher),
+		language: b.language,
+		year: b.year,
+		extension: b.extension,
+		filesize: b.filesize,
+		pages: b.pages,
+		description: clean(b.description),
+		md5: b.md5,
+		isbn: b.isbn,
+		series: clean(b.series),
+		edition: clean(b.edition),
+	}));
+
+	if (resume) {
+		return db.insert(books).values(values).onConflictDoNothing();
+	}
+
+	return db
 		.insert(books)
-		.values(
-			batch.map((b) => ({
-				source: b.source,
-				source_id: b.source_id,
-				title: clean(b.title),
-				author: clean(b.author),
-				publisher: clean(b.publisher),
-				language: b.language,
-				year: b.year,
-				extension: b.extension,
-				filesize: b.filesize,
-				pages: b.pages,
-				description: clean(b.description),
-				md5: b.md5,
-				isbn: b.isbn,
-				series: clean(b.series),
-				edition: clean(b.edition),
-			})),
-		)
+		.values(values)
 		.onConflictDoUpdate({
 			target: books.source_id,
 			set: {
@@ -66,20 +74,38 @@ const insertBooks = (db: PostgresJsDatabase, batch: NewBook[]) =>
 				isbn: sql.raw('excluded.isbn'),
 				series: sql.raw('excluded.series'),
 				edition: sql.raw('excluded.edition'),
+				updated_at: sql.raw('now()'),
 			},
+			where: sql`
+				books.title IS DISTINCT FROM excluded.title
+				OR books.author IS DISTINCT FROM excluded.author
+				OR books.publisher IS DISTINCT FROM excluded.publisher
+				OR books.language IS DISTINCT FROM excluded.language
+				OR books.year IS DISTINCT FROM excluded.year
+				OR books.extension IS DISTINCT FROM excluded.extension
+				OR books.filesize IS DISTINCT FROM excluded.filesize
+				OR books.pages IS DISTINCT FROM excluded.pages
+				OR books.description IS DISTINCT FROM excluded.description
+				OR books.md5 IS DISTINCT FROM excluded.md5
+				OR books.isbn IS DISTINCT FROM excluded.isbn
+				OR books.series IS DISTINCT FROM excluded.series
+				OR books.edition IS DISTINCT FROM excluded.edition
+			`,
 		});
+};
 
 const log = createLog('import-books');
 
 export const runImportBooks = async (
 	dataDir: string,
 	db: PostgresJsDatabase,
-	limit?: number,
+	opts?: { limit?: number; resume?: boolean },
 ) =>
 	streamImport(dataDir, {
 		filePattern: 'zlib3_records',
 		log,
 		parse: parseBook,
-		insert: (batch) => insertBooks(db, batch),
-		limit,
+		insert: (batch, resume) => insertBooks(db, batch, resume),
+		resume: opts?.resume,
+		limit: opts?.limit,
 	});

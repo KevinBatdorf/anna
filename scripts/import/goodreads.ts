@@ -43,23 +43,31 @@ export const parseGoodreads = (line: string): NewGoodreads | null => {
 	};
 };
 
-const insertGoodreads = (db: PostgresJsDatabase, batch: NewGoodreads[]) =>
-	db
+const insertGoodreads = (
+	db: PostgresJsDatabase,
+	batch: NewGoodreads[],
+	resume: boolean,
+) => {
+	const values = batch.map((b) => ({
+		source_id: b.source_id,
+		title: clean(b.title),
+		author: clean(b.author),
+		rating: b.rating,
+		ratings_count: b.ratings_count,
+		description: clean(b.description),
+		genres: clean(b.genres),
+		isbn: b.isbn,
+		pages: b.pages,
+		year: b.year,
+	}));
+
+	if (resume) {
+		return db.insert(goodreads).values(values).onConflictDoNothing();
+	}
+
+	return db
 		.insert(goodreads)
-		.values(
-			batch.map((b) => ({
-				source_id: b.source_id,
-				title: clean(b.title),
-				author: clean(b.author),
-				rating: b.rating,
-				ratings_count: b.ratings_count,
-				description: clean(b.description),
-				genres: clean(b.genres),
-				isbn: b.isbn,
-				pages: b.pages,
-				year: b.year,
-			})),
-		)
+		.values(values)
 		.onConflictDoUpdate({
 			target: goodreads.source_id,
 			set: {
@@ -72,20 +80,34 @@ const insertGoodreads = (db: PostgresJsDatabase, batch: NewGoodreads[]) =>
 				isbn: sql.raw('excluded.isbn'),
 				pages: sql.raw('excluded.pages'),
 				year: sql.raw('excluded.year'),
+				updated_at: sql.raw('now()'),
 			},
+			where: sql`
+				goodreads.title IS DISTINCT FROM excluded.title
+				OR goodreads.author IS DISTINCT FROM excluded.author
+				OR goodreads.rating IS DISTINCT FROM excluded.rating
+				OR goodreads.ratings_count IS DISTINCT FROM excluded.ratings_count
+				OR goodreads.description IS DISTINCT FROM excluded.description
+				OR goodreads.genres IS DISTINCT FROM excluded.genres
+				OR goodreads.isbn IS DISTINCT FROM excluded.isbn
+				OR goodreads.pages IS DISTINCT FROM excluded.pages
+				OR goodreads.year IS DISTINCT FROM excluded.year
+			`,
 		});
+};
 
 const log = createLog('import-goodreads');
 
 export const runImportGoodreads = async (
 	dataDir: string,
 	db: PostgresJsDatabase,
-	limit?: number,
+	opts?: { limit?: number; resume?: boolean },
 ) =>
 	streamImport(dataDir, {
 		filePattern: 'goodreads_records',
 		log,
 		parse: parseGoodreads,
-		insert: (batch) => insertGoodreads(db, batch),
-		limit,
+		insert: (batch, resume) => insertGoodreads(db, batch, resume),
+		resume: opts?.resume,
+		limit: opts?.limit,
 	});

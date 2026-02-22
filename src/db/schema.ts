@@ -7,6 +7,7 @@ import {
 	real,
 	serial,
 	text,
+	timestamp,
 	uniqueIndex,
 	vector,
 } from 'drizzle-orm/pg-core';
@@ -36,6 +37,8 @@ export const books = pgTable(
 		isbn: text('isbn'),
 		series: text('series'),
 		edition: text('edition'),
+		created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+		updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 		search: tsvector('search').generatedAlwaysAs(
 			(): SQL =>
 				sql`setweight(to_tsvector('english', coalesce(${books.title}, '')), 'A') ||
@@ -70,6 +73,8 @@ export const goodreads = pgTable(
 		pages: text('pages'),
 		year: text('year'),
 		embedding: vector('embedding', { dimensions: 768 }),
+		created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+		updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 		search: tsvector('search').generatedAlwaysAs(
 			(): SQL =>
 				sql`setweight(to_tsvector('english', coalesce(${goodreads.title}, '')), 'A') ||

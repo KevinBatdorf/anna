@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_search_goodreads
 createdAt: 2026-02-20T00:00:00
-updatedAt: 2026-02-21T21:24:44.989274200
+updatedAt: 2026-02-21T21:25:16.522008800
 workspaceId: ws_anna
 folderId: fl_search
 authentication: {}
@@ -18,7 +18,7 @@ url: ${[ baseUrl ]}/search/goodreads
 urlParameters:
 - enabled: true
   name: q
-  value: anne rice
+  value: bourdain
   id: P4hAzT9idb
 - enabled: true
   name: limit

@@ -23,12 +23,12 @@ export const logDir =
 	process.env.LOG_DIR || `${import.meta.dirname}/../../data`;
 
 export const createLog = (name: string) => {
-	const logStream = Bun.file(`${logDir}/${name}.log`).writer();
+	const path = `${logDir}/${name}.log`;
+	const fd = require('node:fs').openSync(path, 'a');
 	return (msg: string) => {
 		const line = `[${new Date().toISOString()}] ${msg}\n`;
 		process.stdout.write(line);
-		logStream.write(line);
-		logStream.flush();
+		require('node:fs').writeSync(fd, line);
 	};
 };
 
@@ -38,7 +38,8 @@ export interface ImportConfig<T> {
 	filePattern: string;
 	log: (msg: string) => void;
 	parse: (line: string) => T | null;
-	insert: (batch: T[]) => Promise<unknown>;
+	insert: (batch: T[], resume: boolean) => Promise<unknown>;
+	resume?: boolean;
 	limit?: number;
 }
 
@@ -118,7 +119,7 @@ export const streamImport = async <T>(
 	dataDir: string,
 	config: ImportConfig<T>,
 ) => {
-	const { log, limit } = config;
+	const { log, limit, resume = false } = config;
 
 	if (!zstdReady) {
 		await initZstd();
@@ -140,7 +141,9 @@ export const streamImport = async <T>(
 
 	const file = files[0];
 	const filePath = `${dataDir}/${file}`;
-	log(`Importing: ${file}`);
+	log(
+		`Importing: ${file}${resume ? ' (resume — ON CONFLICT DO NOTHING)' : ' (full upsert)'}`,
+	);
 
 	const decoder = new TextDecoder();
 	let count = 0;
@@ -183,7 +186,7 @@ export const streamImport = async <T>(
 
 			if (batch.length >= BATCH) {
 				try {
-					await config.insert(batch);
+					await config.insert(batch, resume);
 					count += batch.length;
 				} catch (e) {
 					log(
@@ -218,7 +221,7 @@ export const streamImport = async <T>(
 
 	if (batch.length > 0 && (!limit || count < limit)) {
 		try {
-			await config.insert(batch);
+			await config.insert(batch, resume);
 			count += batch.length;
 		} catch (e) {
 			log(`Final batch failed: ${e instanceof Error ? e.message : e}`);

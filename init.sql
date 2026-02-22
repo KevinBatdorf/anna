@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS books (
 	isbn TEXT,
 	series TEXT,
 	edition TEXT,
+	created_at TIMESTAMPTZ DEFAULT now(),
+	updated_at TIMESTAMPTZ DEFAULT now(),
 	search TSVECTOR GENERATED ALWAYS AS (
 		setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 		setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
@@ -46,6 +48,8 @@ CREATE TABLE IF NOT EXISTS goodreads (
 	pages TEXT,
 	year TEXT,
 	embedding vector(768),
+	created_at TIMESTAMPTZ DEFAULT now(),
+	updated_at TIMESTAMPTZ DEFAULT now(),
 	search TSVECTOR GENERATED ALWAYS AS (
 		setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 		setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
@@ -58,6 +62,12 @@ CREATE TABLE IF NOT EXISTS goodreads (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_goodreads_source_id ON goodreads(source_id);
 CREATE INDEX IF NOT EXISTS idx_goodreads_isbn ON goodreads(isbn);
 CREATE INDEX IF NOT EXISTS idx_goodreads_search ON goodreads USING gin(search);
+
+-- Add timestamp columns to existing tables (no-op on fresh DB)
+ALTER TABLE books ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE books ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE goodreads ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE goodreads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS import_meta (
 	key TEXT PRIMARY KEY,

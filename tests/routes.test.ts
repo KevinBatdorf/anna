@@ -30,6 +30,7 @@ beforeAll(async () => {
 		publisher TEXT, language TEXT, year TEXT, extension TEXT,
 		filesize INTEGER, pages TEXT, description TEXT, md5 TEXT,
 		isbn TEXT, series TEXT, edition TEXT,
+		created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(),
 		search tsvector GENERATED ALWAYS AS (
 			setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 			setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
@@ -46,6 +47,7 @@ beforeAll(async () => {
 		ratings_count INTEGER, description TEXT, genres TEXT,
 		isbn TEXT, pages TEXT, year TEXT,
 		embedding vector(768),
+		created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(),
 		search tsvector GENERATED ALWAYS AS (
 			setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 			setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
