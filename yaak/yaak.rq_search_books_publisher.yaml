@@ -1,0 +1,42 @@
+type: http_request
+model: http_request
+id: rq_search_books_publisher
+createdAt: 2026-02-22T00:00:00
+updatedAt: 2026-02-22T12:57:01.312427100
+workspaceId: ws_anna
+folderId: fl_search
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Search books by publisher (no text query)
+headers: []
+method: GET
+name: Search by Publisher
+sortPriority: 0.5
+url: ${[ baseUrl ]}/search
+urlParameters:
+- enabled: true
+  name: publisher
+  value: No Starch
+  id: pA1publish1
+- enabled: true
+  name: language
+  value: english
+  id: pA1langua1
+- enabled: true
+  name: limit
+  value: '10'
+  id: pA1limit01
+- enabled: true
+  name: offset
+  value: '0'
+  id: pA1offset1
+- enabled: true
+  name: ext
+  value: pdf
+  id: GXtkFKsyJg
+- enabled: true
+  name: ''
+  value: ''
+  id: h3guv0whJ4

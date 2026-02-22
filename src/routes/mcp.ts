@@ -14,9 +14,34 @@ function registerTools(server: McpServer, app: Hono) {
 		{
 			title: 'Search Books',
 			description:
-				"Search for books in Anna's Archive by keyword. Returns title, author, format, MD5, ISBN, and more. Results are deduplicated by default, preferring PDF > epub.",
+				"Search for books in Anna's Archive by keyword and/or filters. Returns title, author, format, MD5, ISBN, and more. Results are deduplicated by default, preferring PDF > epub. You can combine a text query with filters, or use filters alone.",
 			inputSchema: {
-				query: z.string().describe('Search query (title, author, ISBN, etc.)'),
+				query: z
+					.string()
+					.optional()
+					.describe(
+						'Full-text search query (searches title, author, publisher, description, ISBN)',
+					),
+				author: z
+					.string()
+					.optional()
+					.describe('Filter by author name (partial match)'),
+				publisher: z
+					.string()
+					.optional()
+					.describe(
+						'Filter by publisher name (partial match, e.g. "No Starch")',
+					),
+				language: z
+					.string()
+					.optional()
+					.describe(
+						'Filter by language (exact match, e.g. "english", "french")',
+					),
+				year: z
+					.string()
+					.optional()
+					.describe('Filter by publication year (exact match, e.g. "2024")'),
 				limit: z
 					.number()
 					.int()
@@ -36,12 +61,25 @@ function registerTools(server: McpServer, app: Hono) {
 					.describe('Filter by file extension (pdf, epub, etc.)'),
 			},
 		},
-		async ({ query, limit, offset, ext }) => {
+		async ({
+			query,
+			author,
+			publisher,
+			language,
+			year,
+			limit,
+			offset,
+			ext,
+		}) => {
 			const params = new URLSearchParams({
-				q: query,
 				limit: String(limit),
 				offset: String(offset),
 			});
+			if (query) params.set('q', query);
+			if (author) params.set('author', author);
+			if (publisher) params.set('publisher', publisher);
+			if (language) params.set('language', language);
+			if (year) params.set('year', year);
 			if (ext) params.set('ext', ext);
 			const res = await app.request(`/search?${params}`);
 			const data = await res.json();
@@ -56,9 +94,28 @@ function registerTools(server: McpServer, app: Hono) {
 		{
 			title: 'Search Goodreads',
 			description:
-				'Search the Goodreads catalog for books with ratings, reviews, and descriptions. Uses vector search when available, otherwise full-text search.',
+				'Search the Goodreads catalog for books with ratings, reviews, and descriptions. Uses vector search when available (plain query only), otherwise full-text search. Supports filtering by author, year, and genre.',
 			inputSchema: {
-				query: z.string().describe('Search query (title, author, genre, etc.)'),
+				query: z
+					.string()
+					.optional()
+					.describe(
+						'Full-text search query (title, author, description, genre)',
+					),
+				author: z
+					.string()
+					.optional()
+					.describe('Filter by author name (partial match)'),
+				year: z
+					.string()
+					.optional()
+					.describe('Filter by publication year (exact match)'),
+				genre: z
+					.string()
+					.optional()
+					.describe(
+						'Filter by genre (partial match, e.g. "fantasy", "science fiction")',
+					),
 				limit: z
 					.number()
 					.int()
@@ -74,12 +131,15 @@ function registerTools(server: McpServer, app: Hono) {
 					.describe('Offset for pagination'),
 			},
 		},
-		async ({ query, limit, offset }) => {
+		async ({ query, author, year, genre, limit, offset }) => {
 			const params = new URLSearchParams({
-				q: query,
 				limit: String(limit),
 				offset: String(offset),
 			});
+			if (query) params.set('q', query);
+			if (author) params.set('author', author);
+			if (year) params.set('year', year);
+			if (genre) params.set('genre', genre);
 			const res = await app.request(`/search/goodreads?${params}`);
 			const data = await res.json();
 			return {

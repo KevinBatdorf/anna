@@ -161,6 +161,58 @@ describe('GET /search', () => {
 		expect(status).toBe(200);
 		expect(body.count).toBe(2);
 	});
+
+	it('filters by publisher', async () => {
+		const { status, body } = await get('/search?publisher=Allen&dedupe=false');
+		expect(status).toBe(200);
+		expect(body.count).toBe(2);
+		for (const r of body.results) {
+			expect((r.publisher as string).toLowerCase()).toContain('allen');
+		}
+	});
+
+	it('filters by author', async () => {
+		const { status, body } = await get('/search?author=Herbert');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('Dune');
+	});
+
+	it('combines q with publisher filter', async () => {
+		const { status, body } = await get(
+			'/search?q=hobbit&publisher=Allen&dedupe=false',
+		);
+		expect(status).toBe(200);
+		expect(body.count).toBe(2);
+		expect(body.results[0].title).toBe('The Hobbit');
+	});
+
+	it('filters by language', async () => {
+		const { status, body } = await get('/search?language=en&dedupe=false');
+		expect(status).toBe(200);
+		expect(body.count).toBe(3);
+	});
+
+	it('filters by year', async () => {
+		const { status, body } = await get('/search?year=1965');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('Dune');
+	});
+
+	it('allows filters without q', async () => {
+		const { status, body } = await get('/search?publisher=Chilton');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('Dune');
+		expect(body.query).toBeUndefined();
+	});
+
+	it('returns 400 with no q and no filters', async () => {
+		const { status, body } = await get('/search');
+		expect(status).toBe(400);
+		expect(body.error).toBeDefined();
+	});
 });
 
 describe('GET /search/books', () => {
@@ -179,9 +231,38 @@ describe('GET /search/goodreads', () => {
 		expect(body.results[0].author).toBe('J.R.R. Tolkien');
 	});
 
-	it('returns 400 without q param', async () => {
+	it('returns 400 with no q and no filters', async () => {
 		const { status } = await get('/search/goodreads');
 		expect(status).toBe(400);
+	});
+
+	it('filters by author', async () => {
+		const { status, body } = await get('/search/goodreads?author=Tolkien');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('The Hobbit');
+	});
+
+	it('filters by year', async () => {
+		const { status, body } = await get('/search/goodreads?year=2020');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('Obscure Book');
+	});
+
+	it('filters by genre', async () => {
+		const { status, body } = await get('/search/goodreads?genre=Fantasy');
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
+		expect(body.results[0].title).toBe('The Hobbit');
+	});
+
+	it('combines q with author filter', async () => {
+		const { status, body } = await get(
+			'/search/goodreads?q=adventure&author=Tolkien',
+		);
+		expect(status).toBe(200);
+		expect(body.count).toBe(1);
 	});
 });
 

@@ -20,6 +20,18 @@ urlParameters:
   name: q
   value: bourdain
   id: P4hAzT9idb
+- enabled: false
+  name: author
+  value: ''
+  id: gA1author2
+- enabled: false
+  name: year
+  value: ''
+  id: gA1year002
+- enabled: false
+  name: genre
+  value: ''
+  id: gA1genre01
 - enabled: true
   name: limit
   value: '20'
@@ -28,7 +40,3 @@ urlParameters:
   name: offset
   value: '0'
   id: aq6up6vn5q
-- enabled: true
-  name: ''
-  value: ''
-  id: HhjCvim8kj

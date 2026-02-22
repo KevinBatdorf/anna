@@ -15,8 +15,8 @@ The API runs locally. Default: `http://localhost:3100`
 
 | Endpoint | Description |
 |---|---|
-| `GET /search?q=...&limit=20&offset=0&ext=&dedupe=true` | Full-text search across Zlib3 book records |
-| `GET /search/goodreads?q=...&limit=20&offset=0` | Search Goodreads ratings & reviews |
+| `GET /search?q=...&author=&publisher=&language=&year=&ext=&dedupe=true&limit=20&offset=0` | Search Zlib3 book records (FTS + filters) |
+| `GET /search/goodreads?q=...&author=&year=&genre=&limit=20&offset=0` | Search Goodreads ratings & reviews (FTS + filters) |
 | `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Similar books via vector search (ISBN or exact title) |
 | `GET /lookup/md5?md5=...` | Look up a book by MD5 hash |
 | `GET /lookup/isbn?isbn=...` | Look up by ISBN (returns both book file + Goodreads data) |
@@ -26,18 +26,37 @@ The API runs locally. Default: `http://localhost:3100`
 ### Search
 
 ```
-GET /search?q=<query>&limit=20&offset=0&ext=pdf&dedupe=true
+GET /search?q=<query>&author=&publisher=&language=&year=&ext=pdf&dedupe=true&limit=20&offset=0
 ```
 
 Returns Zlib3 records: title, author, publisher, language, year, extension, filesize, pages, md5, isbn, series.
 
-Optional parameters:
-- `ext` — filter by file format (e.g. `ext=pdf`, `ext=epub`). Only returns books in that format.
-- `dedupe` — deduplicate results by title+author, keeping the best format (pdf > epub > other). Default: `true`. Set `dedupe=false` to see all formats.
+Either `q` or at least one filter is required. All params are optional and can be combined:
+- `q` — full-text search across title, author, publisher, description, ISBN
+- `author` — filter by author (partial match, e.g. `author=Tolkien`)
+- `publisher` — filter by publisher (partial match, e.g. `publisher=No Starch`)
+- `language` — filter by language (exact match, e.g. `language=english`)
+- `year` — filter by publication year (exact match, e.g. `year=2024`)
+- `ext` — filter by file format (e.g. `ext=pdf`, `ext=epub`)
+- `dedupe` — deduplicate results by title+author, keeping the best format (pdf > epub > other). Default: `true`.
 
-Results are sorted by relevance, with PDF preferred over epub over other formats. When the user wants a book, prefer searching without `ext` — deduplication ensures one result per book with the best available format.
+When `q` is provided, results are sorted by relevance. Without `q`, sorted by newest first.
 
-For Goodreads data specifically: `GET /search/goodreads?q=<query>` — returns title, author, rating, ratings_count, description, genres, isbn, pages, year. Supports vector search (semantic similarity) when embeddings are configured.
+### Search Goodreads
+
+```
+GET /search/goodreads?q=<query>&author=&year=&genre=&limit=20&offset=0
+```
+
+Returns Goodreads entries: title, author, rating, ratings_count, description, genres, isbn, pages, year.
+
+Either `q` or at least one filter is required:
+- `q` — full-text search (uses vector search when available, otherwise FTS)
+- `author` — filter by author (partial match)
+- `year` — filter by publication year (exact match)
+- `genre` — filter by genre (partial match, e.g. `genre=fantasy`)
+
+Vector search is only used for plain `q` queries with no filters. When filters are present, FTS is used. Without `q`, results are sorted by rating (highest first).
 
 ### Similar
 
@@ -82,8 +101,12 @@ The response includes `account_fast_download_info` with `downloads_left`, `downl
 
 | User intent | Endpoint | Why |
 |---|---|---|
-| Specific title/author ("Do you have Dune?") | `/search` | FTS keyword match, returns downloadable files |
-| Topical discovery ("books about stoicism") | `/search/goodreads` | Semantic vec search across Goodreads catalog |
+| Specific title/author ("Do you have Dune?") | `/search?q=dune+frank+herbert` | FTS keyword match, returns downloadable files |
+| Publisher browsing ("No Starch Press books") | `/search?publisher=no+starch` | Direct publisher filter, no FTS needed |
+| Author catalog ("books by Kernighan") | `/search?author=kernighan` | Direct author filter |
+| Filtered search ("Python books in English") | `/search?q=python&language=english` | FTS + language filter |
+| Topical discovery ("books about stoicism") | `/search/goodreads?q=stoicism` | Semantic vec search across Goodreads catalog |
+| Genre browsing ("fantasy books") | `/search/goodreads?genre=fantasy` | Direct genre filter on Goodreads |
 | Quality picks ("recommend a sci-fi book") | `/similar` with `min_rating=3.5&min_reviews=100` | Vec search + rating filter |
 | Similar books ("books like Project Hail Mary") | `/similar?q=<isbn>` | ISBN gives best match; falls back to title |
 | Rating/metadata lookup | `/lookup/isbn` or `/lookup/md5` | Direct lookup by identifier |

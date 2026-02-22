@@ -14,14 +14,27 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 
 	app.get('/search/goodreads', async (c) => {
 		const q = c.req.query('q');
-		if (!q) return c.json({ error: 'Missing ?q= parameter' }, 400);
+		const author = c.req.query('author');
+		const year = c.req.query('year');
+		const genre = c.req.query('genre');
+		const hasFilters = author || year || genre;
+
+		if (!q && !hasFilters)
+			return c.json(
+				{
+					error: 'Provide ?q= and/or filter params (author, year, genre)',
+				},
+				400,
+			);
+
 		const limit = Math.min(
 			Number.parseInt(c.req.query('limit') || '20', 10),
 			100,
 		);
 		const offset = Number.parseInt(c.req.query('offset') || '0', 10);
 
-		if (isVecSearchAvailable()) {
+		// Vector search only when using plain q with no filters
+		if (q && !hasFilters && isVecSearchAvailable()) {
 			try {
 				const vecResults = await vecSearchGoodreads(q, raw, limit + offset);
 				const sliced = vecResults.slice(offset);
@@ -60,18 +73,36 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 			}
 		}
 
+		// Build WHERE fragments for FTS + filters
+		const conditions = [];
+		if (q) conditions.push(raw`search @@ plainto_tsquery('english', ${q})`);
+		if (author) conditions.push(raw`author ILIKE ${`%${author}%`}`);
+		if (year) conditions.push(raw`year = ${year}`);
+		if (genre) conditions.push(raw`genres ILIKE ${`%${genre}%`}`);
+
+		const where = conditions.reduce((acc, cond, i) =>
+			i === 0 ? cond : raw`${acc} AND ${cond}`,
+		);
+
+		const orderBy = q
+			? raw`ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC`
+			: raw`ORDER BY rating DESC NULLS LAST`;
+
 		try {
 			const results = await raw`
 				SELECT id, source_id, title, author, rating, ratings_count,
 				       description, genres, isbn, pages, year
 				FROM goodreads
-				WHERE search @@ plainto_tsquery('english', ${q})
-				ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC
+				WHERE ${where}
+				${orderBy}
 				LIMIT ${limit}
 				OFFSET ${offset}`;
 
 			return c.json({
-				query: q,
+				...(q ? { query: q } : {}),
+				...(author ? { author } : {}),
+				...(year ? { year } : {}),
+				...(genre ? { genre } : {}),
 				count: results.length,
 				offset,
 				search_type: 'fts',
@@ -94,7 +125,21 @@ async function handleBookSearch(
 	raw: postgres.Sql,
 ) {
 	const q = c.req.query('q');
-	if (!q) return c.json({ error: 'Missing ?q= parameter' }, 400);
+	const author = c.req.query('author');
+	const publisher = c.req.query('publisher');
+	const language = c.req.query('language');
+	const year = c.req.query('year');
+	const hasFilters = author || publisher || language || year;
+
+	if (!q && !hasFilters)
+		return c.json(
+			{
+				error:
+					'Provide ?q= and/or filter params (author, publisher, language, year)',
+			},
+			400,
+		);
+
 	const limit = Math.min(
 		Number.parseInt(c.req.query('limit') || '20', 10),
 		100,
@@ -103,31 +148,35 @@ async function handleBookSearch(
 	const ext = c.req.query('ext');
 	const dedupe = c.req.query('dedupe') !== 'false';
 
+	// Build WHERE fragments
+	const conditions = [];
+	if (q) conditions.push(raw`search @@ plainto_tsquery('english', ${q})`);
+	if (author) conditions.push(raw`author ILIKE ${`%${author}%`}`);
+	if (publisher) conditions.push(raw`publisher ILIKE ${`%${publisher}%`}`);
+	if (language) conditions.push(raw`language = ${language.toLowerCase()}`);
+	if (year) conditions.push(raw`year = ${year}`);
+	if (ext) conditions.push(raw`extension = ${ext.toLowerCase()}`);
+
+	const where = conditions.reduce((acc, cond, i) =>
+		i === 0 ? cond : raw`${acc} AND ${cond}`,
+	);
+
+	const orderBy = q
+		? raw`ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC,
+			CASE extension WHEN 'pdf' THEN 0 WHEN 'epub' THEN 1 ELSE 2 END`
+		: raw`ORDER BY id DESC`;
+
 	try {
 		let results: Record<string, unknown>[];
 
-		if (ext) {
-			results = await raw`
-				SELECT id, source, source_id, title, author, publisher,
-				       language, year, extension, filesize, pages, md5, isbn, series
-				FROM books
-				WHERE extension = ${ext.toLowerCase()}
-				  AND search @@ plainto_tsquery('english', ${q})
-				LIMIT ${limit}
-				OFFSET ${offset}`;
-		} else if (dedupe) {
+		if (dedupe) {
 			const overFetch = (limit + offset) * 5;
 			const rawRows = await raw`
 				SELECT id, source, source_id, title, author, publisher,
 				       language, year, extension, filesize, pages, md5, isbn, series
 				FROM books
-				WHERE search @@ plainto_tsquery('english', ${q})
-				ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC,
-					CASE extension
-						WHEN 'pdf' THEN 0
-						WHEN 'epub' THEN 1
-						ELSE 2
-					END
+				WHERE ${where}
+				${orderBy}
 				LIMIT ${overFetch}`;
 
 			const seen = new Set<string>();
@@ -144,22 +193,21 @@ async function handleBookSearch(
 				SELECT id, source, source_id, title, author, publisher,
 				       language, year, extension, filesize, pages, md5, isbn, series
 				FROM books
-				WHERE search @@ plainto_tsquery('english', ${q})
-				ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC,
-					CASE extension
-						WHEN 'pdf' THEN 0
-						WHEN 'epub' THEN 1
-						ELSE 2
-					END
+				WHERE ${where}
+				${orderBy}
 				LIMIT ${limit}
 				OFFSET ${offset}`;
 		}
 
 		return c.json({
-			query: q,
+			...(q ? { query: q } : {}),
+			...(author ? { author } : {}),
+			...(publisher ? { publisher } : {}),
+			...(language ? { language } : {}),
+			...(year ? { year } : {}),
+			...(ext ? { ext } : {}),
 			count: results.length,
 			offset,
-			...(ext ? { ext } : {}),
 			results,
 		});
 	} catch (e: unknown) {

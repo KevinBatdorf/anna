@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_search_books
 createdAt: 2026-02-20T00:00:00
-updatedAt: 2026-02-21T21:19:05.736483700
+updatedAt: 2026-02-22T11:23:59.602403400
 workspaceId: ws_anna
 folderId: fl_search
 authentication: {}
@@ -18,8 +18,24 @@ url: ${[ baseUrl ]}/search
 urlParameters:
 - enabled: true
   name: q
-  value: dracula anne rice
+  value: webgpu
   id: xBFeV7G8Wj
+- enabled: false
+  name: author
+  value: ''
+  id: fA1author1
+- enabled: false
+  name: publisher
+  value: ''
+  id: fA1publish1
+- enabled: false
+  name: language
+  value: ''
+  id: fA1langua1
+- enabled: false
+  name: year
+  value: ''
+  id: fA1year001
 - enabled: true
   name: limit
   value: '20'
@@ -28,7 +44,3 @@ urlParameters:
   name: offset
   value: '0'
   id: vKpQeNRXyT
-- enabled: true
-  name: ''
-  value: ''
-  id: cAJcvnrsyD

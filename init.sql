@@ -28,12 +28,16 @@ CREATE TABLE IF NOT EXISTS books (
 	) STORED
 );
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_id ON books(source_id);
 CREATE INDEX IF NOT EXISTS idx_books_md5 ON books(md5);
 CREATE INDEX IF NOT EXISTS idx_books_isbn ON books(isbn);
 CREATE INDEX IF NOT EXISTS idx_books_language ON books(language);
 CREATE INDEX IF NOT EXISTS idx_books_extension ON books(extension);
 CREATE INDEX IF NOT EXISTS idx_books_search ON books USING gin(search);
+CREATE INDEX IF NOT EXISTS idx_books_publisher_trgm ON books USING gin(publisher gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_books_author_trgm ON books USING gin(author gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS goodreads (
 	id SERIAL PRIMARY KEY,
