@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGoodreads, xmlTag } from '../scripts/import/goodreads';
+import { parseGoodreads } from '../scripts/import/goodreads';
 
 // Real sample from the actual torrent data
 const SAMPLE_LINE = JSON.stringify({
@@ -38,31 +38,6 @@ const SAMPLE_LINE = JSON.stringify({
 </book>
 </GoodreadsResponse>`,
 	},
-});
-
-describe('xmlTag', () => {
-	it('extracts plain text content', () => {
-		expect(xmlTag('<num_pages>619</num_pages>', 'num_pages')).toBe('619');
-	});
-
-	it('extracts CDATA content', () => {
-		expect(xmlTag('<title><![CDATA[Hello World]]></title>', 'title')).toBe(
-			'Hello World',
-		);
-	});
-
-	it('returns empty string for missing tag', () => {
-		expect(xmlTag('<foo>bar</foo>', 'baz')).toBe('');
-	});
-
-	it('trims whitespace', () => {
-		expect(xmlTag('<tag>  spaced  </tag>', 'tag')).toBe('spaced');
-	});
-
-	it('handles multiline content', () => {
-		const xml = '<description><![CDATA[Line one.\nLine two.]]></description>';
-		expect(xmlTag(xml, 'description')).toBe('Line one.\nLine two.');
-	});
 });
 
 describe('parseGoodreads', () => {

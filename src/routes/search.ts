@@ -17,12 +17,14 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 		const author = c.req.query('author');
 		const year = c.req.query('year');
 		const genre = c.req.query('genre');
+		const searchType = c.req.query('search_type'); // 'fts' | 'vector'
 		const hasFilters = author || year || genre;
 
 		if (!q && !hasFilters)
 			return c.json(
 				{
-					error: 'Provide ?q= and/or filter params (author, year, genre)',
+					error:
+						'Provide ?q= and/or filter params (author, year, genre). Optional: search_type=fts|vector',
 				},
 				400,
 			);
@@ -33,8 +35,9 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 		);
 		const offset = Number.parseInt(c.req.query('offset') || '0', 10);
 
-		// Vector search only when using plain q with no filters
-		if (q && !hasFilters && isVecSearchAvailable()) {
+		// Vector search: use when explicitly requested or auto (no filters, no override)
+		const tryVector = searchType === 'vector' || (!searchType && !hasFilters);
+		if (q && tryVector && isVecSearchAvailable()) {
 			try {
 				const vecResults = await vecSearchGoodreads(q, raw, limit + offset);
 				const sliced = vecResults.slice(offset);
@@ -69,9 +72,16 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 					});
 				}
 			} catch {
-				// Fall through to FTS
+				if (searchType === 'vector')
+					return c.json({ error: 'Vector search failed' }, 500);
 			}
 		}
+
+		if (searchType === 'vector')
+			return c.json(
+				{ error: 'Vector search unavailable (no OLLAMA_URL or no results)' },
+				400,
+			);
 
 		// Build WHERE fragments for FTS + filters
 		const conditions = [];

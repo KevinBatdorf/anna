@@ -10,7 +10,7 @@ export function composeEmbedText(row: {
 	return [row.title, row.author, row.description, row.genres]
 		.filter(Boolean)
 		.join(' | ')
-		.slice(0, 2048);
+		.slice(0, 8000);
 }
 
 export function isVecSearchAvailable(): boolean {

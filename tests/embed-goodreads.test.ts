@@ -24,13 +24,13 @@ describe('composeEmbedText', () => {
 		expect(text).toBe('Dune | Frank Herbert');
 	});
 
-	it('truncates to 2048 chars', () => {
+	it('truncates to 8000 chars', () => {
 		const text = composeEmbedText({
-			title: 'A'.repeat(3000),
+			title: 'A'.repeat(10000),
 			author: 'Author',
 			description: 'Desc',
 			genres: 'Genre',
 		});
-		expect(text.length).toBe(2048);
+		expect(text.length).toBe(8000);
 	});
 });

@@ -243,7 +243,7 @@ function registerTools(server: McpServer, app: Hono) {
 		{
 			title: 'Get Stats',
 			description:
-				'Get database statistics: total books, Goodreads entries, embedding progress, and import metadata.',
+				'Get database statistics: total books, Goodreads entries, and embedding progress.',
 			inputSchema: {},
 		},
 		async () => {

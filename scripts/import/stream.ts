@@ -1,117 +1,100 @@
 /**
- * Generic streaming import engine for a single .zst data file.
- * Expects exactly one matching file — errors if zero or multiple found.
- *
- * Uses @bokuweb/zstd-wasm to decompress individual zstd frames in-process.
- * The .seekable.zst files are concatenated frames, so we read the file
- * with Bun.file().stream(), find frame boundaries via the magic bytes
- * (0xFD2FB528), and decompress one frame at a time to keep memory low.
+ * Generic streaming import engine for .zst data files.
+ * Uses @bokuweb/zstd-wasm for in-process frame-by-frame decompression.
+ * Parses the seekable zst seek table for exact frame boundaries.
+ * Natural backpressure: one frame decompressed at a time, insert awaited
+ * before the next frame is read.
  */
-import { readdir } from 'node:fs/promises';
+import { open, readdir, stat } from 'node:fs/promises';
 import { decompress, init as initZstd } from '@bokuweb/zstd-wasm';
 
 const BATCH = 500;
-/** Zstd frame magic number: 0x28B52FFD (little-endian) */
-const ZSTD_MAGIC = new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]);
-
-const clean = (s: string | null): string | null =>
-	s?.replaceAll('\x00', '') ?? null;
-
-export { clean };
-
-export const logDir =
-	process.env.LOG_DIR || `${import.meta.dirname}/../../data`;
-
-export const createLog = (name: string) => {
-	const path = `${logDir}/${name}.log`;
-	const fd = require('node:fs').openSync(path, 'a');
-	return (msg: string) => {
-		const line = `[${new Date().toISOString()}] ${msg}\n`;
-		process.stdout.write(line);
-		require('node:fs').writeSync(fd, line);
-	};
-};
+/** Seekable zst footer magic: 0x8F92EAB1 (little-endian) */
+const SEEKABLE_MAGIC = new Uint8Array([0xb1, 0xea, 0x92, 0x8f]);
 
 let zstdReady = false;
 
 export interface ImportConfig<T> {
 	filePattern: string;
-	log: (msg: string) => void;
 	parse: (line: string) => T | null;
-	insert: (batch: T[], resume: boolean) => Promise<unknown>;
-	resume?: boolean;
+	insert: (batch: T[]) => Promise<unknown>;
+	skip?: number;
+	onBatch?: (linesProcessed: number, count: number) => Promise<void>;
 	limit?: number;
 }
 
-/** Find the next zstd frame magic starting from `from` (exclusive of position 0 when from=0). */
-const findNextFrame = (buf: Uint8Array, from: number): number => {
-	for (let i = from; i <= buf.length - 4; i++) {
-		if (
-			buf[i] === ZSTD_MAGIC[0] &&
-			buf[i + 1] === ZSTD_MAGIC[1] &&
-			buf[i + 2] === ZSTD_MAGIC[2] &&
-			buf[i + 3] === ZSTD_MAGIC[3]
-		) {
-			return i;
-		}
-	}
-	return -1;
-};
+/** Read the seek table from the end of a .seekable.zst file.
+ *  Returns an array of compressed frame sizes in order. */
+async function readSeekTable(path: string): Promise<number[]> {
+	const fh = await open(path, 'r');
+	const fileSize = (await stat(path)).size;
 
-/**
- * Yields individual zstd frames from a .seekable.zst file by reading
- * it in chunks and splitting on frame magic bytes.
- */
+	try {
+		// Footer is last 9 bytes: [numFrames(4), descriptor(1), magic(4)]
+		const footerBuf = Buffer.alloc(9);
+		await fh.read(footerBuf, 0, 9, fileSize - 9);
+		// Verify magic
+		if (
+			footerBuf[5] !== SEEKABLE_MAGIC[0] ||
+			footerBuf[6] !== SEEKABLE_MAGIC[1] ||
+			footerBuf[7] !== SEEKABLE_MAGIC[2] ||
+			footerBuf[8] !== SEEKABLE_MAGIC[3]
+		) {
+			throw new Error('Not a seekable zst file (bad footer magic)');
+		}
+
+		const view = new DataView(
+			footerBuf.buffer,
+			footerBuf.byteOffset,
+			footerBuf.byteLength,
+		);
+		const numFrames = view.getUint32(0, true);
+		const descriptor = footerBuf[4];
+		const hasChecksum = (descriptor & 0x80) !== 0;
+		const entrySize = hasChecksum ? 12 : 8;
+
+		// Seek table entries sit before the skippable frame footer.
+		// Layout: [skippable_magic(4)][frame_size(4)][entries...][footer(9)]
+		const tableSize = numFrames * entrySize;
+		const tableStart = fileSize - 9 - tableSize;
+		const tableBuf = Buffer.alloc(tableSize);
+		await fh.read(tableBuf, 0, tableSize, tableStart);
+		const tableView = new DataView(
+			tableBuf.buffer,
+			tableBuf.byteOffset,
+			tableBuf.byteLength,
+		);
+
+		const frameSizes: number[] = [];
+		for (let i = 0; i < numFrames; i++) {
+			const compressedSize = tableView.getUint32(i * entrySize, true);
+			frameSizes.push(compressedSize);
+		}
+		return frameSizes;
+	} finally {
+		await fh.close();
+	}
+}
+
+/** Yields individual zstd frames from a .seekable.zst file using the seek table. */
 async function* readFrames(
 	path: string,
 ): AsyncGenerator<Uint8Array, void, void> {
-	const reader = Bun.file(path).stream().getReader();
-	let buf = new Uint8Array(0);
+	const frameSizes = await readSeekTable(path);
+	// Use Node fs.read for exact byte reads (Bun.file().slice() returns wrong
+	// sizes on Docker-mounted volumes)
+	const fh = await open(path, 'r');
+	let offset = 0;
 
-	const append = (chunk: Uint8Array) => {
-		const next = new Uint8Array(buf.length + chunk.length);
-		next.set(buf);
-		next.set(chunk, buf.length);
-		buf = next;
-	};
-
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		append(value);
-
-		// Yield complete frames from the buffer
-		while (true) {
-			// Skip the skippable seek table frame at the end (magic 0x184D2A5E)
-			if (
-				buf.length >= 4 &&
-				buf[0] === 0x5e &&
-				buf[1] === 0x2a &&
-				buf[2] === 0x4d &&
-				buf[3] === 0x18
-			) {
-				buf = new Uint8Array(0);
-				break;
-			}
-
-			// Find next frame boundary after the current frame start
-			const nextStart = findNextFrame(buf, 4);
-			if (nextStart === -1) break; // Need more data
-
-			yield buf.slice(0, nextStart);
-			buf = buf.slice(nextStart);
+	try {
+		for (const size of frameSizes) {
+			const buf = Buffer.alloc(size);
+			const { bytesRead } = await fh.read(buf, 0, size, offset);
+			yield new Uint8Array(buf.buffer, 0, bytesRead);
+			offset += size;
 		}
-	}
-
-	// Yield remaining data as last frame (if it starts with magic)
-	if (
-		buf.length > 4 &&
-		buf[0] === ZSTD_MAGIC[0] &&
-		buf[1] === ZSTD_MAGIC[1] &&
-		buf[2] === ZSTD_MAGIC[2] &&
-		buf[3] === ZSTD_MAGIC[3]
-	) {
-		yield buf;
+	} finally {
+		await fh.close();
 	}
 }
 
@@ -119,7 +102,7 @@ export const streamImport = async <T>(
 	dataDir: string,
 	config: ImportConfig<T>,
 ) => {
-	const { log, limit, resume = false } = config;
+	const { limit, skip = 0 } = config;
 
 	if (!zstdReady) {
 		await initZstd();
@@ -139,95 +122,59 @@ export const streamImport = async <T>(
 			`Expected 1 ${config.filePattern} file, found ${files.length}`,
 		);
 
-	const file = files[0];
-	const filePath = `${dataDir}/${file}`;
-	log(
-		`Importing: ${file}${resume ? ' (resume — ON CONFLICT DO NOTHING)' : ' (full upsert)'}`,
-	);
+	const fileName = files[0];
+	const filePath = `${dataDir}/${fileName}`;
 
 	const decoder = new TextDecoder();
+	let lineNum = 0;
 	let count = 0;
-	let errors = 0;
 	let batch: T[] = [];
-	let partial = ''; // Leftover partial line from previous frame
+	let leftover = '';
 	let done = false;
 
 	for await (const frame of readFrames(filePath)) {
 		if (done) break;
 
-		let text: string;
-		try {
-			const decompressed = decompress(frame);
-			text = decoder.decode(decompressed);
-		} catch (e) {
-			log(`Frame decompress error: ${e instanceof Error ? e.message : e}`);
-			continue;
-		}
-
-		// Prepend any leftover partial line from previous frame
-		text = partial + text;
+		const decompressed = decompress(frame, {
+			defaultHeapSize: 16 * 1024 * 1024,
+		});
+		const text = leftover + decoder.decode(decompressed);
 		const lines = text.split('\n');
-		partial = lines.pop() ?? '';
+		leftover = lines.pop() ?? '';
 
 		for (const line of lines) {
 			if (!line.trim()) continue;
-			let row: T | null;
-			try {
-				row = config.parse(line);
-			} catch {
-				errors++;
-				continue;
-			}
-			if (!row) {
-				errors++;
-				continue;
-			}
-			batch.push(row);
+			lineNum++;
+			if (lineNum <= skip) continue;
+
+			const parsed = config.parse(line);
+			if (!parsed) continue;
+			batch.push(parsed);
 
 			if (batch.length >= BATCH) {
-				try {
-					await config.insert(batch, resume);
-					count += batch.length;
-				} catch (e) {
-					log(
-						`Batch failed at ~${count}: ${e instanceof Error ? e.message : e}`,
-					);
-					errors += batch.length;
-				}
+				await config.insert(batch);
+				count += batch.length;
 				batch = [];
+				if (config.onBatch) await config.onBatch(lineNum, count);
 				if (limit && count >= limit) {
-					log(`Limit reached (${limit.toLocaleString()})`);
 					done = true;
 					break;
 				}
-				await Bun.sleep(10);
-				if (count % 10_000 === 0 && count > 0)
-					log(`${count.toLocaleString()} rows (${errors} errors)`);
 			}
 		}
 	}
 
-	// Process last partial line
-	if (!done && partial.trim()) {
-		let row: T | null;
-		try {
-			row = config.parse(partial);
-		} catch {
-			row = null;
-			errors++;
-		}
-		if (row) batch.push(row);
+	// Process leftover partial line
+	if (!done && leftover.trim()) {
+		const parsed = config.parse(leftover);
+		if (parsed) batch.push(parsed);
 	}
 
 	if (batch.length > 0 && (!limit || count < limit)) {
-		try {
-			await config.insert(batch, resume);
-			count += batch.length;
-		} catch (e) {
-			log(`Final batch failed: ${e instanceof Error ? e.message : e}`);
-			errors += batch.length;
-		}
+		await config.insert(batch);
+		count += batch.length;
+		if (config.onBatch) await config.onBatch(lineNum, count);
 	}
 
-	log(`Done: ${count.toLocaleString()} rows (${errors} errors)`);
+	return { file: fileName, count };
 };

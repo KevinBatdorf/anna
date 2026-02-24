@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_search_goodreads
 createdAt: 2026-02-20T00:00:00
-updatedAt: 2026-02-21T21:25:16.522008800
+updatedAt: 2026-02-24T00:16:48.393426
 workspaceId: ws_anna
 folderId: fl_search
 authentication: {}
@@ -33,6 +33,10 @@ urlParameters:
   value: ''
   id: gA1genre01
 - enabled: true
+  name: search_type
+  value: fts
+  id: gA1srchtyp
+- enabled: true
   name: limit
   value: '20'
   id: SBbaUj60HS
@@ -40,3 +44,7 @@ urlParameters:
   name: offset
   value: '0'
   id: aq6up6vn5q
+- enabled: true
+  name: ''
+  value: ''
+  id: CtRz8FiUin

@@ -104,13 +104,8 @@ describe('parseBook', () => {
 		expect(() => parseBook('')).toThrow();
 	});
 
-	it('handles missing metadata fields gracefully', () => {
+	it('returns null for records with no title', () => {
 		const line = JSON.stringify({ metadata: { zlibrary_id: 99 } });
-		const row = parseBook(line);
-		expect(row).not.toBeNull();
-		expect(row?.source).toBe('zlib3');
-		expect(row?.source_id).toBe('99');
-		expect(row?.title).toBe('');
-		expect(row?.filesize).toBe(0);
+		expect(parseBook(line)).toBeNull();
 	});
 });

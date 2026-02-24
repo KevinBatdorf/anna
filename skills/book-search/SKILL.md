@@ -16,12 +16,12 @@ The API runs locally. Default: `http://localhost:3100`
 | Endpoint | Description |
 |---|---|
 | `GET /search?q=...&author=&publisher=&language=&year=&ext=&dedupe=true&limit=20&offset=0` | Search Zlib3 book records (FTS + filters) |
-| `GET /search/goodreads?q=...&author=&year=&genre=&limit=20&offset=0` | Search Goodreads ratings & reviews (FTS + filters) |
+| `GET /search/goodreads?q=...&author=&year=&genre=&search_type=&limit=20&offset=0` | Search Goodreads ratings & reviews (FTS/vector + filters) |
 | `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Similar books via vector search (ISBN or exact title) |
 | `GET /lookup/md5?md5=...` | Look up a book by MD5 hash |
 | `GET /lookup/isbn?isbn=...` | Look up by ISBN (returns both book file + Goodreads data) |
 | `GET /download?md5=...` | Get download URL (proxies Anna's Archive API) |
-| `GET /stats` | Database stats and import info |
+| `GET /stats` | Database stats (books/goodreads counts, import status, embeddings %) |
 
 ### Search
 
@@ -45,18 +45,19 @@ When `q` is provided, results are sorted by relevance. Without `q`, sorted by ne
 ### Search Goodreads
 
 ```
-GET /search/goodreads?q=<query>&author=&year=&genre=&limit=20&offset=0
+GET /search/goodreads?q=<query>&author=&year=&genre=&search_type=&limit=20&offset=0
 ```
 
-Returns Goodreads entries: title, author, rating, ratings_count, description, genres, isbn, pages, year.
+Returns Goodreads entries: title, author, rating, ratings_count, description, genres, isbn, pages, year. Vector results also include `similarity` (0-1).
 
 Either `q` or at least one filter is required:
 - `q` — full-text search (uses vector search when available, otherwise FTS)
 - `author` — filter by author (partial match)
 - `year` — filter by publication year (exact match)
 - `genre` — filter by genre (partial match, e.g. `genre=fantasy`)
+- `search_type` — force search method: `fts` (full-text only) or `vector` (vector only). Default: auto (vector for plain `q` with no filters, FTS otherwise). Returns `400` if `vector` is requested but unavailable.
 
-Vector search is only used for plain `q` queries with no filters. When filters are present, FTS is used. Without `q`, results are sorted by rating (highest first).
+By default, vector search is used for plain `q` queries with no filters, falling back to FTS. When filters are present, FTS is always used. Without `q`, results are sorted by rating (highest first).
 
 ### Similar
 

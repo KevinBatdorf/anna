@@ -1,5 +1,6 @@
 import { type SQL, sql } from 'drizzle-orm';
 import {
+	bigint,
 	customType,
 	index,
 	integer,
@@ -30,7 +31,7 @@ export const books = pgTable(
 		language: text('language'),
 		year: text('year'),
 		extension: text('extension'),
-		filesize: integer('filesize'),
+		filesize: bigint('filesize', { mode: 'number' }),
 		pages: text('pages'),
 		description: text('description'),
 		md5: text('md5'),

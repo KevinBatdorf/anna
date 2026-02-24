@@ -59,7 +59,7 @@ services:
     build: .
     container_name: anna-updater
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     environment:
       ANNAS_BASE_URL: "${ANNAS_BASE_URL:-https://annas-archive.li}"
       ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
@@ -74,15 +74,14 @@ services:
     build: .
     container_name: anna-importer
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     environment:
       DATABASE_URL: "postgres://anna:anna@anna-postgres:5432/anna"
-      DATA_DIR: "/data/torrents"
-      LOG_DIR: "/data"
       OLLAMA_URL: "${OLLAMA_URL:-}"
       OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
+      IMPORT_LIMIT: "${IMPORT_LIMIT:-0}"
       IMPORT_CRON: "${IMPORT_CRON:-0 * * * *}"
-    command: sh -c 'echo "$$IMPORT_CRON /usr/local/bin/bun run /app/scripts/import/index.ts" > /tmp/crontab && exec /usr/local/bin/supercronic /tmp/crontab'
+    command: sh -c 'rm -f /app/data/import.lock; bun run /app/scripts/import/index.ts || true; echo "$$IMPORT_CRON /usr/local/bin/bun run /app/scripts/import/index.ts" > /tmp/crontab && exec /usr/local/bin/supercronic /tmp/crontab'
     restart: unless-stopped
     depends_on:
       - postgres

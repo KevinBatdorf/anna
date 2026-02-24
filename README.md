@@ -2,7 +2,7 @@
 
 > Klanker disclosure: This project was vibe-coded.
 
-A self-hosted REST API for searching and discovering books, powered by data from [Anna's Archive](https://en.wikipedia.org/wiki/Anna%27s_Archive) and Goodreads.
+A self-hosted REST API for searching and discovering books, powered by data from [Anna's Archive](https://annas-archive.li?r=A8V5hcf) and Goodreads.
 
 Downloads two open datasets via torrent (Zlib3 book metadata + Goodreads ratings), imports them into PostgreSQL with full-text search, and serves a JSON API. Does **not** host or serve any book files — it's a metadata search engine.
 

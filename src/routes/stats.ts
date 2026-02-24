@@ -5,65 +5,51 @@ export function statsRoutes(raw: postgres.Sql) {
 	const app = new Hono();
 
 	app.get('/stats', async (c) => {
-		try {
-			// Check if import_meta table exists (may not on fresh DB)
-			const tableCheck = await raw`
-				SELECT EXISTS (
-					SELECT 1 FROM information_schema.tables
-					WHERE table_name = 'import_meta'
-				) as exists`;
+		const [[{ c: embedCount }], metaRows] = await Promise.all([
+			raw`SELECT COUNT(*)::int as c FROM goodreads WHERE embedding IS NOT NULL`,
+			raw`SELECT key, value FROM import_meta ORDER BY key`,
+		]);
 
-			if (!tableCheck[0]?.exists) {
-				return c.json({
-					books: 0,
-					goodreads: 0,
-					embeddings: 0,
-					embeddings_model: null,
-					embeddings_progress: null,
-					import: {},
-					status: 'importing',
-				});
-			}
+		const meta: Record<string, string> = {};
+		for (const row of metaRows) meta[row.key] = row.value;
 
-			const meta = await raw`SELECT key, value FROM import_meta`;
-			const metaObj = Object.fromEntries(
-				meta
-					.filter((m) => m.key !== 'embeddings_count')
-					.map((m) => [m.key, m.value]),
-			);
+		const importing = !!meta.import_started && !meta.import_finished;
+		const booksDone = meta.books_done === 'true';
+		const grDone = meta.goodreads_done === 'true';
 
-			// MAX(id) hits the PK index — instant even during active imports
-			const [{ c: bookCount }] =
-				await raw`SELECT COALESCE(MAX(id), 0) as c FROM books`;
-			const [{ c: goodreadsCount }] =
-				await raw`SELECT COALESCE(MAX(id), 0) as c FROM goodreads`;
+		const grCount = Number(meta.goodreads_count) || 0;
+		const embeds = Number(embedCount);
 
-			const grCount = Number(goodreadsCount);
-			const embCount = Number(metaObj.embeddings_last_id ?? 0);
-			const progress =
-				grCount > 0 && embCount > 0
-					? Math.round((embCount / grCount) * 1000) / 10
-					: 0;
-
-			return c.json({
-				books: Number(bookCount),
-				goodreads: grCount,
-				embeddings: embCount,
-				embeddings_model: metaObj.embeddings_model ?? null,
-				embeddings_progress: progress > 0 ? `${progress}%` : null,
-				import: metaObj,
-			});
-		} catch {
-			return c.json({
-				books: 0,
-				goodreads: 0,
-				embeddings: 0,
-				embeddings_model: null,
-				embeddings_progress: null,
-				import: {},
-				status: 'starting',
-			});
-		}
+		return c.json({
+			books: {
+				count: Number(meta.books_count) || 0,
+				status: booksDone ? 'done' : importing ? 'importing' : 'pending',
+			},
+			goodreads: {
+				count: grCount,
+				status: grDone
+					? 'done'
+					: booksDone && importing
+						? 'importing'
+						: 'pending',
+			},
+			embeddings: {
+				count: embeds,
+				total: grCount,
+				percent: grCount > 0 ? Math.round((embeds / grCount) * 1000) / 10 : 0,
+				status:
+					grDone && importing
+						? 'importing'
+						: grDone && !importing
+							? 'done'
+							: 'pending',
+			},
+			import: {
+				started_at: meta.import_started || null,
+				finished_at: meta.import_finished || null,
+				error: meta.import_error || null,
+			},
+		});
 	});
 
 	return app;

@@ -18,7 +18,7 @@ let sql: ReturnType<typeof postgres>;
 let app: Hono;
 
 beforeAll(async () => {
-	sql = postgres(TEST_DB_URL, { max: 5 });
+	sql = postgres(TEST_DB_URL, { max: 1 });
 
 	// Create isolated schema for this test run
 	await sql`CREATE SCHEMA ${sql(TEST_SCHEMA)}`;
@@ -69,8 +69,10 @@ beforeAll(async () => {
 	await sql`INSERT INTO goodreads (source_id, title, author, rating, ratings_count, description, genres, isbn, pages, year)
 		VALUES ('gr1', 'The Hobbit', 'J.R.R. Tolkien', 4.28, 3500000, 'Bilbo''s adventure', 'Fantasy,Adventure', '9780261103344', '310', '1937')`;
 
-	await sql`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '1')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('books_count', '1')`;
 	await sql`INSERT INTO import_meta (key, value) VALUES ('goodreads_count', '1')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('books_done', 'true')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('goodreads_done', 'true')`;
 
 	const db = drizzle(sql, { schema });
 
@@ -174,8 +176,8 @@ describe('POST /mcp — tools/call', () => {
 			arguments: {},
 		});
 		const data = JSON.parse(body.result.content[0].text);
-		expect(data.books).toBe(1);
-		expect(data.goodreads).toBe(1);
+		expect(data.books).toEqual({ count: 1, status: 'done' });
+		expect(data.goodreads).toEqual({ count: 1, status: 'done' });
 	});
 
 	it('get_download_url returns error when API key not configured', async () => {

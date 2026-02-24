@@ -1,104 +1,70 @@
 import type postgres from 'postgres';
 import { embed, getEmbedModel, isOllamaEnabled } from '../../src/lib/ollama';
 import { composeEmbedText } from '../../src/lib/vec-search';
-import { createLog, logDir } from './stream';
 
 const BATCH_SIZE = 10;
-const CACHE_PATH = `${logDir}/embeddings-cache.json`;
-
-const log = createLog('embed-goodreads');
+const dataDir = `${import.meta.dirname}/../../data`;
+const CACHE_PATH = `${dataDir}/embeddings-cache.json`;
 
 const loadEmbeddingCache = async (): Promise<Record<string, number[]>> => {
-	try {
-		const file = Bun.file(CACHE_PATH);
-		if (await file.exists()) {
-			const data = await file.json();
-			const count = Object.keys(data).length;
-			log(`Loaded ${count.toLocaleString()} cached embeddings from disk`);
-			return data;
-		}
-	} catch (e) {
-		log(`Could not load embedding cache: ${e}`);
-	}
-	return {};
+	const file = Bun.file(CACHE_PATH);
+	if (!(await file.exists())) return {};
+	return file.json();
 };
 
 const saveEmbeddingCache = async (sql: postgres.Sql) => {
-	try {
-		const rows = await sql`
-			SELECT id, embedding::text
-			FROM goodreads
-			WHERE embedding IS NOT NULL
-		`;
-		if (rows.length === 0) return;
+	const rows = await sql`
+		SELECT id, embedding::text
+		FROM goodreads
+		WHERE embedding IS NOT NULL
+	`;
+	if (rows.length === 0) return;
 
-		const cache: Record<string, number[]> = {};
-		for (const row of rows) {
-			const vec = row.embedding
-				.replace(/^\[/, '')
-				.replace(/\]$/, '')
-				.split(',')
-				.map(Number);
-			cache[row.id] = vec;
-		}
-		await Bun.write(CACHE_PATH, JSON.stringify(cache));
-		log(`Saved ${rows.length.toLocaleString()} embeddings to cache`);
-	} catch (e) {
-		log(`Could not save embedding cache: ${e}`);
+	const cache: Record<string, number[]> = {};
+	for (const row of rows) {
+		const vec = row.embedding
+			.replace(/^\[/, '')
+			.replace(/\]$/, '')
+			.split(',')
+			.map(Number);
+		cache[row.id] = vec;
 	}
+	await Bun.write(CACHE_PATH, JSON.stringify(cache));
 };
 
-/** Retry embedding for any rows with embedding IS NULL using progressively shorter text. */
-const retryMissing = async (sql: postgres.Sql, log: (msg: string) => void) => {
-	const missingRows = await sql`
-		SELECT id, title, author, description, genres
-		FROM goodreads
-		WHERE embedding IS NULL
-		ORDER BY id ASC
-		LIMIT 1000`;
+const embedMissing = async (sql: postgres.Sql) => {
+	let total = 0;
+	while (true) {
+		const rows = await sql`
+			SELECT id, title, author, description, genres
+			FROM goodreads
+			WHERE embedding IS NULL
+			ORDER BY id ASC
+			LIMIT 500`;
 
-	if (missingRows.length === 0) return;
+		if (rows.length === 0) break;
 
-	log(`Retry pass: ${missingRows.length} rows still missing embeddings`);
-	let retried = 0;
-	for (const r of missingRows) {
-		const text = composeEmbedText({
-			title: (r.title as string) || '',
-			author: (r.author as string) || '',
-			description: (r.description as string) || '',
-			genres: (r.genres as string) || '',
-		});
-		let vec: Float32Array | null = null;
-		for (const maxLen of [text.length, 1500, 800, 400]) {
-			try {
-				[vec] = await embed([text.slice(0, maxLen)]);
-				break;
-			} catch {
-				// try shorter
-			}
-		}
-		if (vec) {
+		for (const r of rows) {
+			const text = composeEmbedText({
+				title: (r.title as string) || '',
+				author: (r.author as string) || '',
+				description: (r.description as string) || '',
+				genres: (r.genres as string) || '',
+			});
+			const [vec] = await embed([text]);
 			const vecStr = `[${[...vec].join(',')}]`;
 			await sql`UPDATE goodreads SET embedding = ${vecStr}::vector WHERE id = ${r.id}`;
-			retried++;
-		} else {
-			log(
-				`  Permanently skipped id=${r.id} "${r.title}" (too long even at 400 chars)`,
-			);
+			total++;
 		}
 	}
-	if (retried > 0)
-		log(`Retry pass: embedded ${retried} previously-skipped rows`);
+	return total;
 };
 
 export const runEmbedGoodreads = async (opts: {
 	sql: postgres.Sql;
 	limit?: number;
 }) => {
-	if (!isOllamaEnabled()) {
-		log('OLLAMA_URL not set — skipping embedding pass.');
-		return;
-	}
+	if (!isOllamaEnabled()) return { embedded: 0, missing: 0, restored: 0 };
 
 	const { sql } = opts;
 
@@ -107,26 +73,22 @@ export const runEmbedGoodreads = async (opts: {
 	const model = getEmbedModel();
 	let embedded = 0;
 
-	// Ensure import_meta table exists
 	await sql`CREATE TABLE IF NOT EXISTS import_meta (
 		key TEXT PRIMARY KEY,
 		value TEXT
 	)`;
 
-	// --- Restore from disk cache if DB has no embeddings ---
+	// Restore from disk cache if DB has no embeddings
 	const embeddedCount =
 		await sql`SELECT COUNT(*) as c FROM goodreads WHERE embedding IS NOT NULL`;
 	const dbHasEmbeddings = Number(embeddedCount[0]?.c) > 0;
 
+	let restored = 0;
 	if (!dbHasEmbeddings) {
 		const cache = await loadEmbeddingCache();
 		const cacheIds = Object.keys(cache);
 		if (cacheIds.length > 0) {
-			log(
-				`Restoring ${cacheIds.length.toLocaleString()} embeddings from cache...`,
-			);
 			const RESTORE_BATCH = 100;
-			let restored = 0;
 			for (let i = 0; i < cacheIds.length; i += RESTORE_BATCH) {
 				const batch = cacheIds.slice(i, i + RESTORE_BATCH);
 				// biome-ignore lint/suspicious/noExplicitAny: TransactionSql missing tagged template signature
@@ -137,9 +99,6 @@ export const runEmbedGoodreads = async (opts: {
 					}
 				});
 				restored += batch.length;
-				if (restored % 1000 === 0) {
-					log(`  Restored ${restored.toLocaleString()}...`);
-				}
 				await Bun.sleep(1);
 			}
 			const maxCachedId = Math.max(...cacheIds.map(Number));
@@ -147,9 +106,6 @@ export const runEmbedGoodreads = async (opts: {
 				ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
 			await sql`INSERT INTO import_meta (key, value) VALUES ('embeddings_model', ${model})
 				ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
-			log(
-				`Restored ${restored.toLocaleString()} embeddings from cache (last_id=${maxCachedId})`,
-			);
 		}
 	}
 
@@ -158,13 +114,9 @@ export const runEmbedGoodreads = async (opts: {
 	const storedModel = storedModelRows[0]?.value as string | undefined;
 
 	if (storedModel && storedModel !== model) {
-		log(
-			`WARNING: Stored embedding model is "${storedModel}" but current is "${model}".`,
+		throw new Error(
+			`Embedding model mismatch: stored="${storedModel}" current="${model}". Clear embeddings_last_id to re-embed.`,
 		);
-		log(
-			'Skipping embedding. Clear embeddings and embeddings_last_id to re-embed with new model.',
-		);
-		return;
 	}
 
 	const lastIdRows =
@@ -177,22 +129,10 @@ export const runEmbedGoodreads = async (opts: {
 	const estimatedRemaining = (Number(maxRows[0]?.m) || 0) - lastId;
 
 	if (estimatedRemaining <= 0) {
-		log('Embeddings: all records already embedded.');
-		await retryMissing(sql, log);
+		const missing = await embedMissing(sql);
 		await saveEmbeddingCache(sql);
-		return;
+		return { embedded: 0, missing, restored };
 	}
-
-	const remaining =
-		maxRecords > 0
-			? Math.min(maxRecords, estimatedRemaining)
-			: estimatedRemaining;
-
-	log(
-		`Embeddings: ~${remaining.toLocaleString()} records to embed (model: ${model})`,
-	);
-
-	const startTime = Date.now();
 
 	while (true) {
 		if (maxRecords > 0 && embedded >= maxRecords) break;
@@ -219,47 +159,13 @@ export const runEmbedGoodreads = async (opts: {
 			}),
 		);
 
-		let embeddings: Float32Array[];
-		let validRows = [...rows];
-		try {
-			embeddings = await embed(texts);
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			if (msg.includes('context length') || msg.includes('400')) {
-				embeddings = [];
-				validRows = [];
-				for (let i = 0; i < rows.length; i++) {
-					// Retry individually, then with progressively shorter text
-					let vec: Float32Array | null = null;
-					for (const maxLen of [texts[i].length, 1500, 800, 400]) {
-						try {
-							const short = texts[i].slice(0, maxLen);
-							[vec] = await embed([short]);
-							break;
-						} catch {
-							// try shorter
-						}
-					}
-					if (vec) {
-						embeddings.push(vec);
-						validRows.push(rows[i]);
-					} else {
-						log(
-							`  Skipped id=${rows[i].id} (input too long even at 400 chars)`,
-						);
-					}
-				}
-			} else {
-				log(`Ollama error: ${msg}. Stopping embedding pass.`);
-				break;
-			}
-		}
+		const embeddings = await embed(texts);
 
 		// biome-ignore lint/suspicious/noExplicitAny: TransactionSql missing tagged template signature
 		await sql.begin(async (tx: any) => {
-			for (let i = 0; i < validRows.length; i++) {
+			for (let i = 0; i < rows.length; i++) {
 				const vecStr = `[${[...embeddings[i]].join(',')}]`;
-				await tx`UPDATE goodreads SET embedding = ${vecStr}::vector WHERE id = ${validRows[i].id}`;
+				await tx`UPDATE goodreads SET embedding = ${vecStr}::vector WHERE id = ${rows[i].id}`;
 			}
 			lastId = batchMaxId;
 			await tx`INSERT INTO import_meta (key, value) VALUES ('embeddings_last_id', ${String(lastId)})
@@ -268,22 +174,11 @@ export const runEmbedGoodreads = async (opts: {
 				ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
 		});
 
-		embedded += validRows.length;
-
+		embedded += rows.length;
 		await Bun.sleep(1);
-
-		if (embedded % 1000 === 0 || embedded === rows.length) {
-			const elapsed = (Date.now() - startTime) / 1000;
-			const rate = elapsed > 0 ? Math.round(embedded / elapsed) : 0;
-			log(
-				`  ${embedded.toLocaleString()} embedded (${rate}/s, last_id=${lastId})`,
-			);
-		}
 	}
 
-	const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-	log(`Embeddings done: ${embedded.toLocaleString()} records in ${elapsed}s`);
-
-	await retryMissing(sql, log);
+	const missing = await embedMissing(sql);
 	await saveEmbeddingCache(sql);
+	return { embedded, missing, restored };
 };

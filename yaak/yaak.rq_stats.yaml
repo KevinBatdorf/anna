@@ -9,7 +9,7 @@ authentication: {}
 authenticationType: null
 body: {}
 bodyType: null
-description: Database stats and import info
+description: 'Database stats: books/goodreads counts, import status, embeddings %'
 headers: []
 method: GET
 name: Stats

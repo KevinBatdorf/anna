@@ -16,7 +16,7 @@ let sql: ReturnType<typeof postgres>;
 let app: Hono;
 
 beforeAll(async () => {
-	sql = postgres(TEST_DB_URL, { max: 5 });
+	sql = postgres(TEST_DB_URL, { max: 1 });
 
 	// Create isolated schema for this test run
 	await sql`CREATE SCHEMA ${sql(TEST_SCHEMA)}`;
@@ -75,8 +75,10 @@ beforeAll(async () => {
 		VALUES ('gr2', 'Obscure Book', 'Unknown Author', 2.1, 5, 'Not very good', 'Fiction', '', '100', '2020')`;
 
 	// Seed import_meta
-	await sql`INSERT INTO import_meta (key, value) VALUES ('zlib3_count', '3')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('books_count', '3')`;
 	await sql`INSERT INTO import_meta (key, value) VALUES ('goodreads_count', '2')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('books_done', 'true')`;
+	await sql`INSERT INTO import_meta (key, value) VALUES ('goodreads_done', 'true')`;
 
 	// Create a scoped sql that always uses our test schema
 	const db = drizzle(sql, { schema });
@@ -308,13 +310,15 @@ describe('GET /lookup/isbn', () => {
 });
 
 describe('GET /stats', () => {
-	it('returns counts and import metadata', async () => {
+	it('returns structured stats', async () => {
 		const { status, body } = await get('/stats');
 		expect(status).toBe(200);
-		expect(body.books).toBe(3);
-		expect(body.goodreads).toBe(2);
-		expect(body.import.zlib3_count).toBe('3');
-		expect(body.import.goodreads_count).toBe('2');
+		expect(body.books).toEqual({ count: 3, status: 'done' });
+		expect(body.goodreads).toEqual({ count: 2, status: 'done' });
+		expect(body.embeddings.count).toBe(0);
+		expect(body.embeddings.total).toBe(2);
+		expect(body.embeddings.percent).toBe(0);
+		expect(body.import).toBeDefined();
 	});
 });
 

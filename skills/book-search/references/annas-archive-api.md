@@ -22,7 +22,7 @@ GET <base_url>/dyn/api/fast_download.json
 
 **Authentication:**
 - Requires a paid API key
-- Obtain a key by donating on the Anna's Archive website (navigate to `/donate` on the current domain)
+- Obtain a key by donating at `https://annas-archive.li/donate?r=A8V5hcf`
 - API access details are at `/faq#api` on the current domain
 
 **Response:**
@@ -148,7 +148,7 @@ Anna's Archive domains are taken down regularly. Domains that have existed at va
 
 **This list will be outdated.** Always check the [Wikipedia article](https://en.wikipedia.org/wiki/Anna%27s_Archive) for current domains.
 
-The API paths (`/dyn/api/fast_download.json`, `/dyn/torrents.json`, `/donate`, `/faq`) work on any active mirror. Set the `ANNAS_BASE_URL` environment variable in the project to the current working domain.
+The API paths (`/dyn/api/fast_download.json`, `/dyn/torrents.json`, `/donate?r=A8V5hcf`, `/faq`) work on any active mirror. Set the `ANNAS_BASE_URL` environment variable in the project to the current working domain.
 
 ## Rate Limits and Usage Notes
 
