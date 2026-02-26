@@ -13,12 +13,18 @@ export function statsRoutes(raw: postgres.Sql) {
 		const meta: Record<string, string> = {};
 		for (const row of metaRows) meta[row.key] = row.value;
 
-		const importing = !!meta.import_started && !meta.import_finished;
 		const booksDone = meta.books_done === 'true';
 		const grDone = meta.goodreads_done === 'true';
 
 		const grCount = Number(meta.goodreads_count) || 0;
 		const embeds = Number(embedCount);
+		const embedsDone = grCount > 0 && embeds >= grCount;
+
+		// importing = started but not finished, UNLESS all phases completed
+		// (handles case where importer was killed before writing import_finished)
+		const allDone = booksDone && grDone && embedsDone;
+		const importing =
+			!!meta.import_started && !meta.import_finished && !allDone;
 
 		return c.json({
 			books: {
@@ -37,12 +43,11 @@ export function statsRoutes(raw: postgres.Sql) {
 				count: embeds,
 				total: grCount,
 				percent: grCount > 0 ? Math.round((embeds / grCount) * 1000) / 10 : 0,
-				status:
-					grDone && importing
+				status: embedsDone
+					? 'done'
+					: grDone && importing
 						? 'importing'
-						: grDone && !importing
-							? 'done'
-							: 'pending',
+						: 'pending',
 			},
 			import: {
 				started_at: meta.import_started || null,

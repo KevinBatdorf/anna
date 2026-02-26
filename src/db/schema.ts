@@ -89,10 +89,8 @@ export const goodreads = pgTable(
 		uniqueIndex('idx_goodreads_source_id').on(t.source_id),
 		index('idx_goodreads_isbn').on(t.isbn),
 		index('idx_goodreads_search').using('gin', t.search),
-		index('idx_goodreads_embedding').using(
-			'hnsw',
-			t.embedding.op('vector_cosine_ops'),
-		),
+		// IVFFlat index created by importer after embeddings complete (see embed.ts)
+		// Not declared here because it needs dynamic `lists` param based on row count
 	],
 );
 

@@ -96,9 +96,13 @@ for (let attempt = 0; ; attempt++) {
 }
 
 // Check if books import is incomplete (crashed mid-way)
-const incompleteRows =
-	await connection`SELECT value FROM import_meta WHERE key = 'import_line'`;
-const importIncomplete = Number(incompleteRows[0]?.value) > 0;
+// Only relevant if books_done is not set — import_line is a books resume cursor
+const [metaBooksDone, metaImportLine] = await Promise.all([
+	connection`SELECT value FROM import_meta WHERE key = 'books_done'`,
+	connection`SELECT value FROM import_meta WHERE key = 'import_line'`,
+]);
+const importIncomplete =
+	metaBooksDone[0]?.value !== 'true' && Number(metaImportLine[0]?.value) > 0;
 
 // Check if data files changed since last successful run
 let dataChanged = importIncomplete;
@@ -161,20 +165,25 @@ try {
 			if (!limit) await saveMeta('books_done', 'true');
 		}
 
-		// Goodreads has no resume cursor — always starts from line 0 and upserts.
-		status.goodreads = await runImportGoodreads(dataDir, db, {
-			limit,
-			onBatch: async (count) => {
-				await saveMeta('goodreads_count', String(count));
-			},
-		});
-		saveStatus();
-		// Reset sequence + store actual count
-		await connection`SELECT setval('goodreads_id_seq', COALESCE((SELECT MAX(id) FROM goodreads), 1))`;
-		const [{ c: gc }] =
-			await connection`SELECT COUNT(*)::int as c FROM goodreads`;
-		await saveMeta('goodreads_count', String(gc));
-		await saveMeta('goodreads_done', 'true');
+		// Skip goodreads if already completed for this data file
+		const grDone = (
+			await connection`SELECT value FROM import_meta WHERE key = 'goodreads_done'`
+		)[0]?.value;
+		if (grDone !== 'true') {
+			status.goodreads = await runImportGoodreads(dataDir, db, {
+				limit,
+				onBatch: async (count) => {
+					await saveMeta('goodreads_count', String(count));
+				},
+			});
+			saveStatus();
+			// Reset sequence + store actual count
+			await connection`SELECT setval('goodreads_id_seq', COALESCE((SELECT MAX(id) FROM goodreads), 1))`;
+			const [{ c: gc }] =
+				await connection`SELECT COUNT(*)::int as c FROM goodreads`;
+			await saveMeta('goodreads_count', String(gc));
+			if (!limit) await saveMeta('goodreads_done', 'true');
+		}
 
 		if (!limit) await Bun.write(markerPath, new Date().toISOString());
 	}

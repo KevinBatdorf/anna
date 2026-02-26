@@ -70,7 +70,7 @@ GET <base_url>/dyn/torrents.json
 | Dataset | Description | Approximate Size |
 |---|---|---|
 | `zlib3_records` | Book metadata (title, author, MD5, ISBN, file info) | ~40 GB compressed |
-| `goodreads_records` | Ratings, reviews, genres, descriptions | ~5 GB compressed |
+| `goodreads_records` | Ratings, reviews, genres, descriptions (static Sep 2024 snapshot, not regularly updated) | ~5 GB compressed |
 
 Files are JSONL format, compressed with seekable zstd (`.seekable.zst`). The date range in the filename (e.g., `20240809T171652Z--20260211T235731Z`) indicates the record date range covered by that file. Anna's Archive publishes **incremental files** — each covering a specific time window, not a full snapshot. Multiple files for the same source should all be imported; the importers handle deduplication via upserts on `source_id`.
 

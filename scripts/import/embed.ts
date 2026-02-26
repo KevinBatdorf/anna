@@ -180,5 +180,26 @@ export const runEmbedGoodreads = async (opts: {
 
 	const missing = await embedMissing(sql);
 	await saveEmbeddingCache(sql);
+
+	// Create IVFFlat index if it doesn't exist (needed for fast vector search)
+	// IVFFlat builds in minutes on any hardware vs HNSW which needs 50+GB RAM for 11M vectors
+	const hasIndex =
+		await sql`SELECT 1 FROM pg_indexes WHERE indexname = 'idx_goodreads_embedding'`;
+	if (hasIndex.length === 0) {
+		const [{ c: rowCount }] =
+			await sql`SELECT COUNT(*)::int as c FROM goodreads WHERE embedding IS NOT NULL`;
+		const lists = Math.max(100, Math.round(Math.sqrt(Number(rowCount))));
+		console.log(
+			`Creating IVFFlat vector index (${lists} lists for ${rowCount} rows)...`,
+		);
+		// IVFFlat k-means needs ~3GB for 11M vectors — temporarily bump maintenance_work_mem
+		await sql`SET maintenance_work_mem = '4GB'`;
+		await sql.unsafe(
+			`CREATE INDEX idx_goodreads_embedding ON goodreads USING ivfflat (embedding vector_cosine_ops) WITH (lists = ${lists})`,
+		);
+		await sql`RESET maintenance_work_mem`;
+		console.log('IVFFlat index created.');
+	}
+
 	return { embedded, missing, restored };
 };

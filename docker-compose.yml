@@ -20,6 +20,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg17
     container_name: anna-postgres
+    shm_size: 2g
     environment:
       POSTGRES_USER: anna
       POSTGRES_PASSWORD: anna

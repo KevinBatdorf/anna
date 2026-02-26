@@ -5,7 +5,7 @@ description: This skill should be used when the user asks to "find a book", "sea
 
 # Book Search & Recommendations
 
-This skill provides access to a self-hosted REST API that indexes book records from Anna's Archive (Zlib3) and Goodreads ratings. Search for books, get quality-filtered recommendations, and look up metadata by ISBN or MD5 hash. Call `/stats` to see current record counts.
+This skill provides access to a self-hosted REST API that indexes book records from Anna's Archive (Zlib3). Optionally includes Goodreads ratings/reviews (a static Sep 2024 snapshot — useful for ratings, genres, and vector search but not regularly updated). Search for books, get recommendations, and look up metadata by ISBN or MD5 hash. Call `/stats` to see current record counts.
 
 ## API Base URL
 
@@ -16,8 +16,8 @@ The API runs locally. Default: `http://localhost:3100`
 | Endpoint | Description |
 |---|---|
 | `GET /search?q=...&author=&publisher=&language=&year=&ext=&dedupe=true&limit=20&offset=0` | Search Zlib3 book records (FTS + filters) |
-| `GET /search/goodreads?q=...&author=&year=&genre=&search_type=&limit=20&offset=0` | Search Goodreads ratings & reviews (FTS/vector + filters) |
-| `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Similar books via vector search (ISBN or exact title) |
+| `GET /search/goodreads?q=...&author=&year=&genre=&search_type=&limit=20&offset=0` | Search Goodreads ratings & reviews — optional, static Sep 2024 snapshot |
+| `GET /similar?q=...&limit=10&min_rating=0&min_reviews=0` | Similar books via vector search — requires Goodreads + Ollama |
 | `GET /lookup/md5?md5=...` | Look up a book by MD5 hash |
 | `GET /lookup/isbn?isbn=...` | Look up by ISBN (returns both book file + Goodreads data) |
 | `GET /download?md5=...` | Get download URL (proxies Anna's Archive API) |
@@ -42,7 +42,9 @@ Either `q` or at least one filter is required. All params are optional and can b
 
 When `q` is provided, results are sorted by relevance. Without `q`, sorted by newest first.
 
-### Search Goodreads
+### Search Goodreads (optional)
+
+Goodreads data is a static snapshot from September 2024 — useful for ratings, genres, descriptions, and semantic vector search, but not regularly updated by Anna's Archive.
 
 ```
 GET /search/goodreads?q=<query>&author=&year=&genre=&search_type=&limit=20&offset=0
