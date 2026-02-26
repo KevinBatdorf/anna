@@ -2,7 +2,7 @@
 
 > Klanker disclosure: This project was vibe-coded. If your agent wants to fix something, we welcome PRs!
 
-A self-hosted REST API for searching and discovering books, powered by data from [Anna's Archive](https://annas-archive.li?r=A8V5hcf) and Goodreads.
+A self-hosted REST API for searching and discovering books, built on open datasets scraped from [Anna's Archive](https://annas-archive.li?r=A8V5hcf) (Zlib3 metadata, periodically updated) and Goodreads (static snapshot from September 2024).
 
 Downloads two open datasets via torrent (Zlib3 book metadata + Goodreads ratings), imports them into PostgreSQL with full-text search, and serves a JSON API. Does **not** host or serve any book files — it's a metadata search engine.
 
@@ -18,6 +18,8 @@ docker compose up -d
 ```
 
 The API container downloads the full datasets via torrent (~40 GB for books, ~5 GB for Goodreads) and imports them into PostgreSQL automatically. The API is live at `http://localhost:3100` once the first import finishes.
+
+> **Import issues?** The ingestion pipeline can take a while and occasionally hit snags. If something looks stuck, try asking Claude to help debug — it can check container logs, database state, and the `/stats` endpoint to diagnose problems.
 
 ## Data Updates
 
