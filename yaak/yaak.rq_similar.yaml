@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_similar
 createdAt: 2026-02-20T00:00:00
-updatedAt: 2026-02-21T18:41:48.419812300
+updatedAt: 2026-02-26T10:48:58.647134400
 workspaceId: ws_anna
 folderId: fl_search
 authentication: {}
@@ -18,7 +18,7 @@ url: ${[ baseUrl ]}/similar
 urlParameters:
 - enabled: true
   name: q
-  value: sugar cookie slaughter
+  value: witcher
   id: 84b2rnEDtm
 - enabled: true
   name: limit
@@ -35,4 +35,4 @@ urlParameters:
 - enabled: true
   name: ''
   value: ''
-  id: RRQdNPa5gY
+  id: vBwdEpaR9c
