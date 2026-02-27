@@ -1,0 +1,50 @@
+type: http_request
+model: http_request
+id: rq_library_search
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_library
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Full-text search within downloaded library books
+headers: []
+method: GET
+name: Library Search
+sortPriority: 1.0
+url: ${[ baseUrl ]}/library/search
+urlParameters:
+- enabled: true
+  name: q
+  value: webgpu
+  id: libs_query_1
+- enabled: false
+  name: author
+  value: ''
+  id: libs_author1
+- enabled: false
+  name: publisher
+  value: ''
+  id: libs_publis1
+- enabled: false
+  name: language
+  value: ''
+  id: libs_langua1
+- enabled: false
+  name: year
+  value: ''
+  id: libs_year001
+- enabled: false
+  name: ext
+  value: ''
+  id: libs_ext0001
+- enabled: true
+  name: limit
+  value: '20'
+  id: libs_limit_1
+- enabled: true
+  name: offset
+  value: '0'
+  id: libs_offset1

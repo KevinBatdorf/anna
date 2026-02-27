@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_reader_embed
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_reader
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Create vector embeddings for all extracted pages of a book
+headers: []
+method: POST
+name: Reader Embed
+sortPriority: 3.0
+url: ${[ baseUrl ]}/reader/186b49f784490123e826afd50fc603fd/embed
+urlParameters: []

@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_library_list
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_library
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: List all books downloaded to the local library
+headers: []
+method: GET
+name: Library List
+sortPriority: 0.0
+url: ${[ baseUrl ]}/library
+urlParameters:
+- enabled: true
+  name: limit
+  value: '20'
+  id: lib_limit_1
+- enabled: true
+  name: offset
+  value: '0'
+  id: lib_offset1

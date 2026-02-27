@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_library_delete
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_library
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Remove a downloaded book from the local library
+headers: []
+method: DELETE
+name: Library Delete
+sortPriority: 4.0
+url: ${[ baseUrl ]}/library/186b49f784490123e826afd50fc603fd
+urlParameters: []

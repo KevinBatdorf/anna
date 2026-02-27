@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_reader_index
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_reader
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Extract text from every page of a downloaded PDF book
+headers: []
+method: POST
+name: Reader Index
+sortPriority: 1.0
+url: ${[ baseUrl ]}/reader/186b49f784490123e826afd50fc603fd/index
+urlParameters: []

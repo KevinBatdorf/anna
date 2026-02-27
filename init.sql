@@ -70,6 +70,8 @@ CREATE INDEX IF NOT EXISTS idx_goodreads_search ON goodreads USING gin(search);
 -- Add timestamp columns to existing tables (no-op on fresh DB)
 ALTER TABLE books ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE books ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE books ADD COLUMN IF NOT EXISTS downloaded_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_books_downloaded ON books(downloaded_at) WHERE downloaded_at IS NOT NULL;
 ALTER TABLE goodreads ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE goodreads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
@@ -77,3 +79,18 @@ CREATE TABLE IF NOT EXISTS import_meta (
 	key TEXT PRIMARY KEY,
 	value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS book_pages (
+	id SERIAL PRIMARY KEY,
+	md5 TEXT NOT NULL,
+	page_number INTEGER NOT NULL,
+	content TEXT NOT NULL,
+	embedding vector(768),
+	created_at TIMESTAMPTZ DEFAULT now(),
+	UNIQUE(md5, page_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_pages_md5 ON book_pages(md5);
+
+-- Reader metadata: chapter outline extracted from PDF bookmarks
+ALTER TABLE books ADD COLUMN IF NOT EXISTS chapters JSONB;

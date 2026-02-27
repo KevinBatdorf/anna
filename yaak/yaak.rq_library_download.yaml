@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_library_download
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_library
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Download a book to local library storage by MD5
+headers: []
+method: POST
+name: Library Download
+sortPriority: 2.0
+url: ${[ baseUrl ]}/library/download
+urlParameters:
+- enabled: true
+  name: md5
+  value: 186b49f784490123e826afd50fc603fd
+  id: libd_md5_01

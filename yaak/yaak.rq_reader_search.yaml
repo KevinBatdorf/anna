@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_reader_search
+createdAt: 2026-02-27T00:00:00
+updatedAt: 2026-02-27T00:00:00
+workspaceId: ws_anna
+folderId: fl_reader
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: Semantic search within a book using vector embeddings
+headers: []
+method: GET
+name: Reader Search
+sortPriority: 4.0
+url: ${[ baseUrl ]}/reader/186b49f784490123e826afd50fc603fd/search
+urlParameters:
+- enabled: true
+  name: q
+  value: machine learning
+  id: rsearch_q_01
+- enabled: true
+  name: limit
+  value: '5'
+  id: rsearch_limit_01

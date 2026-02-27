@@ -4,6 +4,7 @@ import {
 	customType,
 	index,
 	integer,
+	jsonb,
 	pgTable,
 	real,
 	serial,
@@ -40,6 +41,8 @@ export const books = pgTable(
 		edition: text('edition'),
 		created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 		updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+		downloaded_at: timestamp('downloaded_at', { withTimezone: true }),
+		chapters: jsonb('chapters'),
 		search: tsvector('search').generatedAlwaysAs(
 			(): SQL =>
 				sql`setweight(to_tsvector('english', coalesce(${books.title}, '')), 'A') ||
@@ -56,6 +59,7 @@ export const books = pgTable(
 		index('idx_books_language').on(t.language),
 		index('idx_books_extension').on(t.extension),
 		index('idx_books_search').using('gin', t.search),
+		index('idx_books_downloaded').on(t.downloaded_at),
 	],
 );
 
@@ -99,6 +103,23 @@ export const importMeta = pgTable('import_meta', {
 	value: text('value'),
 });
 
+export const bookPages = pgTable(
+	'book_pages',
+	{
+		id: serial('id').primaryKey(),
+		md5: text('md5').notNull(),
+		page_number: integer('page_number').notNull(),
+		content: text('content').notNull(),
+		embedding: vector('embedding', { dimensions: 768 }),
+		created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+	},
+	(t) => [
+		uniqueIndex('idx_book_pages_md5_page').on(t.md5, t.page_number),
+		index('idx_book_pages_md5').on(t.md5),
+	],
+);
+
 export type Book = typeof books.$inferSelect;
+export type BookPage = typeof bookPages.$inferSelect;
 export type Goodreads = typeof goodreads.$inferSelect;
 export type ImportMeta = typeof importMeta.$inferSelect;

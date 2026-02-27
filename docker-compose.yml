@@ -43,6 +43,8 @@ services:
   api:
     build: .
     container_name: anna-api
+    volumes:
+      - ./data:/app/data
     environment:
       DATABASE_URL: "postgres://anna:anna@anna-postgres:5432/anna"
       PORT: "${PORT:-3100}"

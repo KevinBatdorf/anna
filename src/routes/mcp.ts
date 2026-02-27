@@ -322,6 +322,290 @@ function registerTools(server: McpServer, app: Hono) {
 			};
 		},
 	);
+
+	server.registerTool(
+		'library_list',
+		{
+			title: 'List Library Books',
+			description:
+				'List all books downloaded to the local library. Returns book metadata with download timestamps, ordered by most recently downloaded.',
+			inputSchema: {
+				limit: z
+					.number()
+					.int()
+					.min(1)
+					.max(100)
+					.default(20)
+					.describe('Max results to return'),
+				offset: z
+					.number()
+					.int()
+					.min(0)
+					.default(0)
+					.describe('Offset for pagination'),
+			},
+		},
+		async ({ limit, offset }) => {
+			const params = new URLSearchParams({
+				limit: String(limit),
+				offset: String(offset),
+			});
+			const res = await app.request(`/library?${params}`);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+			};
+		},
+	);
+
+	server.registerTool(
+		'library_search',
+		{
+			title: 'Search Library',
+			description:
+				'Search only books that have been downloaded to the local library. Supports full-text search and filters.',
+			inputSchema: {
+				query: z.string().optional().describe('Full-text search query'),
+				author: z
+					.string()
+					.optional()
+					.describe('Filter by author (partial match)'),
+				publisher: z
+					.string()
+					.optional()
+					.describe('Filter by publisher (partial match)'),
+				language: z
+					.string()
+					.optional()
+					.describe('Filter by language (exact match)'),
+				year: z.string().optional().describe('Filter by publication year'),
+				ext: z
+					.string()
+					.optional()
+					.describe('Filter by file extension (pdf, epub, etc.)'),
+				limit: z
+					.number()
+					.int()
+					.min(1)
+					.max(100)
+					.default(20)
+					.describe('Max results to return'),
+				offset: z
+					.number()
+					.int()
+					.min(0)
+					.default(0)
+					.describe('Offset for pagination'),
+			},
+		},
+		async ({
+			query,
+			author,
+			publisher,
+			language,
+			year,
+			ext,
+			limit,
+			offset,
+		}) => {
+			const params = new URLSearchParams({
+				limit: String(limit),
+				offset: String(offset),
+			});
+			if (query) params.set('q', query);
+			if (author) params.set('author', author);
+			if (publisher) params.set('publisher', publisher);
+			if (language) params.set('language', language);
+			if (year) params.set('year', year);
+			if (ext) params.set('ext', ext);
+			const res = await app.request(`/library/search?${params}`);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+			};
+		},
+	);
+
+	server.registerTool(
+		'library_download',
+		{
+			title: 'Download Book to Library',
+			description:
+				"Download a book to the local library by MD5 hash. Fetches the file from Anna's Archive and stores it locally for offline access.",
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book to download'),
+			},
+		},
+		async ({ md5 }) => {
+			const res = await app.request(
+				`/library/download?md5=${encodeURIComponent(md5)}`,
+				{ method: 'POST' },
+			);
+			const data = await res.json();
+			const isError = !res.ok;
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(isError ? { isError: true } : {}),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_status',
+		{
+			title: 'Reader Status',
+			description:
+				'Get the indexing and embedding status of a book. Shows page count, extraction progress, whether semantic search is ready, and the chapter outline (table of contents with page numbers) extracted from PDF bookmarks.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book'),
+			},
+		},
+		async ({ md5 }) => {
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/status`,
+			);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(res.ok ? {} : { isError: true }),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_index',
+		{
+			title: 'Index Book',
+			description:
+				'Extract text from every page of a downloaded PDF book. Must be run before embedding or searching. Only works on PDF files.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the PDF book to index'),
+			},
+		},
+		async ({ md5 }) => {
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/index`,
+				{ method: 'POST' },
+			);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(res.ok ? {} : { isError: true }),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_page_text',
+		{
+			title: 'Get Page Text',
+			description:
+				'Get the extracted text content of a specific page. The book must be indexed first.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book'),
+				page: z.number().int().min(1).describe('Page number (1-based)'),
+			},
+		},
+		async ({ md5, page }) => {
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/page/${page}`,
+			);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(res.ok ? {} : { isError: true }),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_embed',
+		{
+			title: 'Embed Book Pages',
+			description:
+				'Create vector embeddings for all extracted pages of a book. Required for semantic search. The book must be indexed first. Requires Ollama.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book to embed'),
+			},
+		},
+		async ({ md5 }) => {
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/embed`,
+				{ method: 'POST' },
+			);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(res.ok ? {} : { isError: true }),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_search',
+		{
+			title: 'Search Book',
+			description:
+				'Semantic search within a book using vector embeddings. Returns the most relevant pages for a query. The book must be indexed and embedded first.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the book to search'),
+				query: z.string().describe('Search query'),
+				limit: z
+					.number()
+					.int()
+					.min(1)
+					.max(20)
+					.default(5)
+					.describe('Max results to return'),
+			},
+		},
+		async ({ md5, query, limit }) => {
+			const params = new URLSearchParams({
+				q: query,
+				limit: String(limit),
+			});
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/search?${params}`,
+			);
+			const data = await res.json();
+			return {
+				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				...(res.ok ? {} : { isError: true }),
+			};
+		},
+	);
+
+	server.registerTool(
+		'reader_page_image',
+		{
+			title: 'Get Page Image',
+			description:
+				'Render a specific page of a PDF book as a PNG image. Returns the image as base64-encoded content for viewing.',
+			inputSchema: {
+				md5: z.string().describe('MD5 hash of the PDF book'),
+				page: z.number().int().min(1).describe('Page number (1-based)'),
+			},
+		},
+		async ({ md5, page }) => {
+			const res = await app.request(
+				`/reader/${encodeURIComponent(md5)}/page/${page}/image`,
+			);
+
+			if (!res.ok) {
+				const data = await res.json();
+				return {
+					content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+					isError: true,
+				};
+			}
+
+			const arrayBuf = await res.arrayBuffer();
+			const base64 = Buffer.from(arrayBuf).toString('base64');
+			return {
+				content: [{ type: 'image', data: base64, mimeType: 'image/png' }],
+			};
+		},
+	);
 }
 
 /** Create a connected MCP server+client pair for handling a single request. */
@@ -418,6 +702,15 @@ export function mcpRoutes(app: Hono) {
 				'lookup_md5',
 				'get_stats',
 				'get_download_url',
+				'library_list',
+				'library_search',
+				'library_download',
+				'reader_status',
+				'reader_index',
+				'reader_page_text',
+				'reader_embed',
+				'reader_search',
+				'reader_page_image',
 			],
 			usage: 'POST JSON-RPC 2.0 requests to this endpoint',
 		});
