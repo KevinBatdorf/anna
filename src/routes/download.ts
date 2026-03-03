@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 
-const ANNAS_BASE_URL = process.env.ANNAS_BASE_URL || 'https://annas-archive.li';
+const ANNAS_BASE_URL = process.env.ANNAS_BASE_URL || 'https://annas-archive.gl';
 const ANNAS_API_KEY = process.env.ANNAS_API_KEY || '';
 
 export function downloadRoutes() {

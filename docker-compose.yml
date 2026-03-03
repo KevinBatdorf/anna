@@ -64,7 +64,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      ANNAS_BASE_URL: "${ANNAS_BASE_URL:-https://annas-archive.li}"
+      ANNAS_BASE_URL: "${ANNAS_BASE_URL:-https://annas-archive.gl}"
       ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
       ARIA2_SECRET: "anna"
       UPDATE_CRON: "${UPDATE_CRON:-0 0 * * *}"

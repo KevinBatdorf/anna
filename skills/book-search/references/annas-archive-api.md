@@ -22,7 +22,7 @@ GET <base_url>/dyn/api/fast_download.json
 
 **Authentication:**
 - Requires a paid API key
-- Obtain a key by donating at `https://annas-archive.li/donate?r=A8V5hcf`
+- Obtain a key by donating at `https://annas-archive.gl/donate?r=A8V5hcf`
 - API access details are at `/faq#api` on the current domain
 
 **Response:**
@@ -143,8 +143,11 @@ Anna's Archive domains are taken down regularly. Domains that have existed at va
 - `annas-archive.org` (suspended Jan 2026)
 - `annas-archive.se` (suspended Jan 2026)
 - `annas-archive.pm` (suspended)
-- `annas-archive.li` (working as of Feb 2026)
-- `annas-archive.gl` (added as backup, Feb 2026)
+- `annas-archive.li` (suspended Mar 2026)
+- `annas-archive.gl` (working as of Mar 2026)
+- `annas-archive.pk` (working as of Mar 2026)
+- `annas-archive.vg` (working as of Mar 2026)
+- `annas-archive.gd` (working as of Mar 2026)
 
 **This list will be outdated.** Always check the [Wikipedia article](https://en.wikipedia.org/wiki/Anna%27s_Archive) for current domains.
 

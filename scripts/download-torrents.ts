@@ -14,7 +14,7 @@ function log(msg: string) {
 	logStream.flush();
 }
 
-const ANNAS_BASE_URL = process.env.ANNAS_BASE_URL || 'https://annas-archive.li';
+const ANNAS_BASE_URL = process.env.ANNAS_BASE_URL || 'https://annas-archive.gl';
 const TORRENTS_URL = `${ANNAS_BASE_URL}/dyn/torrents.json`;
 const SOURCES = ['zlib3_records', 'goodreads_records'];
 const ARIA2_URL = process.env.ARIA2_URL || 'http://anna-aria2:6800/jsonrpc';
