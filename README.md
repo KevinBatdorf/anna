@@ -2,13 +2,13 @@
 
 > Klanker disclosure: This project was vibe-coded. If your agent wants to fix something, we welcome PRs!
 
-A self-hosted REST API for searching and discovering books, built on open datasets scraped from [Anna's Archive](https://annas-archive.gl?r=A8V5hcf) (Zlib3 metadata, periodically updated) and Goodreads (static snapshot from September 2024).
+A self-hosted REST API for searching and discovering books, built on open datasets scraped from [Anna's Archive](https://annas-archive.pk?r=A8V5hcf) (Zlib3 metadata, periodically updated) and Goodreads (static snapshot from September 2024).
 
 Downloads two open datasets via torrent (Zlib3 book metadata + Goodreads ratings), imports them into PostgreSQL with full-text search, and serves a JSON API. Does **not** host or serve any book files — it's a metadata search engine.
 
 > **Note:** The Goodreads dataset is a static snapshot from September 2024 — useful for ratings, genres, descriptions, and semantic search, but not regularly updated by Anna's Archive. The Zlib3 book metadata is updated periodically.
 
-The `/download` endpoint requires an `ANNAS_API_KEY` — get one by [becoming a member](https://annas-archive.gl/account?r=A8V5hcf) on Anna's Archive. Search and recommendations work without it.
+The `/download` endpoint requires an `ANNAS_API_KEY` — get one by [becoming a member](https://annas-archive.pk/account?r=A8V5hcf) on Anna's Archive. Search and recommendations work without it.
 
 ## Setup
 
