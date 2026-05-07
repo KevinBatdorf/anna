@@ -58,10 +58,13 @@ jobs:
         id: existing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TLD: ${{ steps.check.outputs.new_tld }}
         run: |
-          COUNT=$(gh pr list --search "Update Anna's Archive domain" --state open --json number --jq length 2>/dev/null || echo "0")
-          if [ "$COUNT" -gt 0 ]; then
-            echo "PR already exists, skipping"
+          BRANCH="update-domain-to-${NEW_TLD}"
+          BRANCH_EXISTS=$(git ls-remote --heads origin "$BRANCH" | wc -l)
+          PR_COUNT=$(gh pr list --search "Update Anna's Archive domain" --state open --json number --jq length 2>/dev/null || echo "0")
+          if [ "$BRANCH_EXISTS" -gt 0 ] || [ "$PR_COUNT" -gt 0 ]; then
+            echo "Branch or PR already exists, skipping"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
