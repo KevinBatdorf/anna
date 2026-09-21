@@ -23,7 +23,7 @@ The API container downloads the full datasets via torrent (~40 GB for books, ~5 
 
 ## Data Updates
 
-The API checks for new data daily but won't download more than once every 30 days (configurable via `UPDATE_INTERVAL_DAYS` in `.env`). Each update downloads the full dataset torrents again — Anna's Archive publishes incremental files, and the importer deduplicates via upsert, so existing records are updated in place. Embeddings are preserved across reimports since row IDs stay stable.
+The updater checks for new data daily and only starts a download when Anna's Archive has published a dump that isn't already in `data/torrents/`. If the configured domain is down it falls back to mirrors listed on Wikipedia, and if `NTFY_URL` is set, sync failures are pushed as notifications instead of failing silently. Each update downloads the full dataset torrents again — Anna's Archive publishes incremental files, and the importer deduplicates via upsert, so existing records are updated in place. Embeddings are preserved across reimports since row IDs stay stable.
 
 ## Endpoints
 
