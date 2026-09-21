@@ -1,6 +1,9 @@
 import type postgres from 'postgres';
-import { embed, getEmbedModel, isOllamaEnabled } from '../../src/lib/ollama';
-import { composeEmbedText } from '../../src/lib/vec-search';
+import { embed, getEmbedModel } from '../../src/lib/ollama';
+import {
+	composeEmbedText,
+	isVecSearchAvailable,
+} from '../../src/lib/vec-search';
 
 const BATCH_SIZE = 10;
 const dataDir = `${import.meta.dirname}/../../data`;
@@ -64,7 +67,7 @@ export const runEmbedGoodreads = async (opts: {
 	sql: postgres.Sql;
 	limit?: number;
 }) => {
-	if (!isOllamaEnabled()) return { embedded: 0, missing: 0, restored: 0 };
+	if (!isVecSearchAvailable()) return { embedded: 0, missing: 0, restored: 0 };
 
 	const { sql } = opts;
 

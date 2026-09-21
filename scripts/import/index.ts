@@ -6,6 +6,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { isVecSearchAvailable } from '../../src/lib/vec-search';
 import { runImportBooks } from './books';
 import { runEmbedGoodreads } from './embed';
 import { runImportGoodreads } from './goodreads';
@@ -122,7 +123,7 @@ if (!dataChanged) {
 
 // Check if embeddings still need work
 const embeddingsIncomplete =
-	process.env.OLLAMA_URL &&
+	isVecSearchAvailable() &&
 	(
 		await connection`SELECT EXISTS(SELECT 1 FROM goodreads WHERE embedding IS NULL) as e`
 	)[0]?.e;
