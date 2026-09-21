@@ -68,6 +68,8 @@ services:
       ARIA2_URL: "http://anna-aria2:6800/jsonrpc"
       ARIA2_SECRET: "anna"
       UPDATE_CRON: "${UPDATE_CRON:-0 0 * * *}"
+      NTFY_URL: "${NTFY_URL:-}"
+      NTFY_TOKEN: "${NTFY_TOKEN:-}"
     command: sh -c 'echo "$$UPDATE_CRON /usr/local/bin/bun run /app/scripts/download-torrents.ts" > /tmp/crontab && exec /usr/local/bin/supercronic /tmp/crontab'
     restart: unless-stopped
     depends_on:
