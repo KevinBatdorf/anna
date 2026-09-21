@@ -50,6 +50,8 @@ For better search quality, you can enable vector embeddings powered by [Ollama](
 
 You can add `OLLAMA_URL` at any time — even after the initial data import. The API checks every 24 hours and will start embedding automatically on its next cycle. To start immediately, restart the container: `docker compose restart api`. The importer validates database integrity before starting embeddings — if corruption is detected, it logs the errors and skips the embedding pass rather than wasting hours on bad data.
 
+**Keyword search only:** Set `GOODREADS_EMBEDDINGS=false` to skip Goodreads vectors entirely. `/search/goodreads` falls back to weighted full-text search (title, author, description, genres), `/similar` and the `find_similar` MCP tool are disabled, and the importer never starts an embedding pass. Ollama stays available for the PDF reader's per-book search. If you already have embeddings, dropping them reclaims roughly 90 GB — see the `idx_goodreads_embedding` index and the `embedding` column on `goodreads`.
+
 **Heads up:** The initial embedding of the full Goodreads catalog (~11M records) will roughly double your database size and takes a while — speed depends entirely on your GPU. On an RTX 4090 it takes about 21 hours (~149 records/sec); slower hardware could take days or weeks. Subsequent updates only embed new records, so after the first run it stays quick. You can set `LIMIT=1000` in `.env` to embed a small batch first and verify everything works before committing to the full run.
 
 ## MCP Server

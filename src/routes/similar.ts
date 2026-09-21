@@ -27,7 +27,7 @@ export function similarRoutes(_db: DB, raw: postgres.Sql) {
 			return c.json(
 				{
 					error:
-						'Vector search not available (OLLAMA_URL not set or no embeddings)',
+						'Vector search not available (OLLAMA_URL not set, GOODREADS_EMBEDDINGS=false, or no embeddings)',
 				},
 				503,
 			);

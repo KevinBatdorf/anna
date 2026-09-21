@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { db, raw } from './db';
+import { isGoodreadsVecEnabled } from './lib/vec-search';
 import { downloadRoutes } from './routes/download';
 import { libraryRoutes } from './routes/library';
 import { lookupRoutes } from './routes/lookup';
@@ -26,7 +27,9 @@ app.get('/', (c) =>
 		endpoints: [
 			'GET /search?q=...&limit=20&offset=0',
 			'GET /search/goodreads?q=...&limit=20&offset=0',
-			'GET /similar?q=...&limit=10&min_rating=0&min_reviews=0',
+			...(isGoodreadsVecEnabled()
+				? ['GET /similar?q=...&limit=10&min_rating=0&min_reviews=0']
+				: []),
 			'GET /lookup/md5?md5=...',
 			'GET /lookup/isbn?isbn=...',
 			'GET /download?md5=...',

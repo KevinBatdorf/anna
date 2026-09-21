@@ -1,12 +1,18 @@
 import { Hono } from 'hono';
 import type postgres from 'postgres';
+import { isGoodreadsVecEnabled } from '../lib/vec-search';
 
 export function statsRoutes(raw: postgres.Sql) {
 	const app = new Hono();
 
 	app.get('/stats', async (c) => {
-		const [[{ c: embedCount }], metaRows] = await Promise.all([
-			raw`SELECT COUNT(*)::int as c FROM goodreads WHERE embedding IS NOT NULL`,
+		const vecEnabled = isGoodreadsVecEnabled();
+		const [embeds, metaRows] = await Promise.all([
+			vecEnabled
+				? raw`SELECT COUNT(*)::int as c FROM goodreads WHERE embedding IS NOT NULL`.then(
+						(r) => Number(r[0].c),
+					)
+				: Promise.resolve(0),
 			raw`SELECT key, value FROM import_meta ORDER BY key`,
 		]);
 
@@ -17,8 +23,7 @@ export function statsRoutes(raw: postgres.Sql) {
 		const grDone = meta.goodreads_done === 'true';
 
 		const grCount = Number(meta.goodreads_count) || 0;
-		const embeds = Number(embedCount);
-		const embedsDone = grCount > 0 && embeds >= grCount;
+		const embedsDone = !vecEnabled || (grCount > 0 && embeds >= grCount);
 
 		// importing = started but not finished, UNLESS all phases completed
 		// (handles case where importer was killed before writing import_finished)
@@ -43,11 +48,13 @@ export function statsRoutes(raw: postgres.Sql) {
 				count: embeds,
 				total: grCount,
 				percent: grCount > 0 ? Math.round((embeds / grCount) * 1000) / 10 : 0,
-				status: embedsDone
-					? 'done'
-					: grDone && importing
-						? 'importing'
-						: 'pending',
+				status: !vecEnabled
+					? 'disabled'
+					: embedsDone
+						? 'done'
+						: grDone && importing
+							? 'importing'
+							: 'pending',
 			},
 			import: {
 				started_at: meta.import_started || null,

@@ -113,18 +113,46 @@ describe('GET /mcp', () => {
 });
 
 describe('POST /mcp — tools/list', () => {
+	// Bun loads .env into tests, so pin the flag rather than inherit it.
+	const withGoodreadsEmbeddings = async (
+		value: string | undefined,
+		fn: () => Promise<void>,
+	) => {
+		const saved = process.env.GOODREADS_EMBEDDINGS;
+		if (value === undefined) delete process.env.GOODREADS_EMBEDDINGS;
+		else process.env.GOODREADS_EMBEDDINGS = value;
+		try {
+			await fn();
+		} finally {
+			if (saved === undefined) delete process.env.GOODREADS_EMBEDDINGS;
+			else process.env.GOODREADS_EMBEDDINGS = saved;
+		}
+	};
+
 	it('lists all registered tools', async () => {
-		const { status, body } = await rpc('tools/list');
-		expect(status).toBe(200);
-		const tools = body.result.tools;
-		const names = tools.map((t: { name: string }) => t.name);
-		expect(names).toContain('search_books');
-		expect(names).toContain('search_goodreads');
-		expect(names).toContain('find_similar');
-		expect(names).toContain('lookup_isbn');
-		expect(names).toContain('lookup_md5');
-		expect(names).toContain('get_stats');
-		expect(names).toContain('get_download_url');
+		await withGoodreadsEmbeddings(undefined, async () => {
+			const { status, body } = await rpc('tools/list');
+			expect(status).toBe(200);
+			const tools = body.result.tools;
+			const names = tools.map((t: { name: string }) => t.name);
+			expect(names).toContain('search_books');
+			expect(names).toContain('search_goodreads');
+			expect(names).toContain('find_similar');
+			expect(names).toContain('lookup_isbn');
+			expect(names).toContain('lookup_md5');
+			expect(names).toContain('get_stats');
+			expect(names).toContain('get_download_url');
+		});
+	});
+
+	it('hides find_similar when GOODREADS_EMBEDDINGS=false', async () => {
+		await withGoodreadsEmbeddings('false', async () => {
+			const { body } = await rpc('tools/list');
+			const names = body.result.tools.map((t: { name: string }) => t.name);
+			expect(names).not.toContain('find_similar');
+			expect(names).toContain('search_goodreads');
+			expect(names).toContain('search_books');
+		});
 	});
 });
 

@@ -13,8 +13,17 @@ export function composeEmbedText(row: {
 		.slice(0, 8000);
 }
 
+/**
+ * Goodreads vectors are opt-out on top of OLLAMA_URL. They cost ~90 GB for the
+ * full 11M-row catalog, and turning them off here (rather than unsetting
+ * OLLAMA_URL) keeps Ollama available for the PDF reader's page embeddings.
+ */
+export function isGoodreadsVecEnabled(): boolean {
+	return process.env.GOODREADS_EMBEDDINGS !== 'false';
+}
+
 export function isVecSearchAvailable(): boolean {
-	return isOllamaEnabled();
+	return isOllamaEnabled() && isGoodreadsVecEnabled();
 }
 
 export async function vecSearchGoodreads(

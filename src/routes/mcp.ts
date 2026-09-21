@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { isGoodreadsVecEnabled } from '../lib/vec-search';
 
 /**
  * Register MCP tools that proxy to the existing Hono app.
@@ -148,53 +149,54 @@ function registerTools(server: McpServer, app: Hono) {
 		},
 	);
 
-	server.registerTool(
-		'find_similar',
-		{
-			title: 'Find Similar Books',
-			description:
-				'Find books similar to a given book using vector embeddings. Pass an ISBN for the most accurate match, or a book title. The title must closely match a Goodreads entry — partial or vague titles may return found:false. Returns Goodreads entries ranked by similarity, with available:true/false indicating downloadable copies.',
-			inputSchema: {
-				query: z
-					.string()
-					.describe(
-						'ISBN (preferred, most accurate) or exact book title to find similar books for',
-					),
-				limit: z
-					.number()
-					.int()
-					.min(1)
-					.max(50)
-					.default(10)
-					.describe('Max results to return'),
-				min_rating: z
-					.number()
-					.min(0)
-					.max(5)
-					.default(0)
-					.describe('Minimum Goodreads rating (0-5)'),
-				min_reviews: z
-					.number()
-					.int()
-					.min(0)
-					.default(0)
-					.describe('Minimum number of Goodreads ratings'),
+	if (isGoodreadsVecEnabled())
+		server.registerTool(
+			'find_similar',
+			{
+				title: 'Find Similar Books',
+				description:
+					'Find books similar to a given book using vector embeddings. Pass an ISBN for the most accurate match, or a book title. The title must closely match a Goodreads entry — partial or vague titles may return found:false. Returns Goodreads entries ranked by similarity, with available:true/false indicating downloadable copies.',
+				inputSchema: {
+					query: z
+						.string()
+						.describe(
+							'ISBN (preferred, most accurate) or exact book title to find similar books for',
+						),
+					limit: z
+						.number()
+						.int()
+						.min(1)
+						.max(50)
+						.default(10)
+						.describe('Max results to return'),
+					min_rating: z
+						.number()
+						.min(0)
+						.max(5)
+						.default(0)
+						.describe('Minimum Goodreads rating (0-5)'),
+					min_reviews: z
+						.number()
+						.int()
+						.min(0)
+						.default(0)
+						.describe('Minimum number of Goodreads ratings'),
+				},
 			},
-		},
-		async ({ query, limit, min_rating, min_reviews }) => {
-			const params = new URLSearchParams({
-				q: query,
-				limit: String(limit),
-				min_rating: String(min_rating),
-				min_reviews: String(min_reviews),
-			});
-			const res = await app.request(`/similar?${params}`);
-			const data = await res.json();
-			return {
-				content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-			};
-		},
-	);
+			async ({ query, limit, min_rating, min_reviews }) => {
+				const params = new URLSearchParams({
+					q: query,
+					limit: String(limit),
+					min_rating: String(min_rating),
+					min_reviews: String(min_reviews),
+				});
+				const res = await app.request(`/similar?${params}`);
+				const data = await res.json();
+				return {
+					content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+				};
+			},
+		);
 
 	server.registerTool(
 		'lookup_isbn',
@@ -711,7 +713,7 @@ export function mcpRoutes(app: Hono) {
 				'reader_embed',
 				'reader_search',
 				'reader_page_image',
-			],
+			].filter((t) => t !== 'find_similar' || isGoodreadsVecEnabled()),
 			usage: 'POST JSON-RPC 2.0 requests to this endpoint',
 		});
 	});
