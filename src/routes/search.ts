@@ -94,8 +94,11 @@ export function searchRoutes(_db: DB, raw: postgres.Sql) {
 			i === 0 ? cond : raw`${acc} AND ${cond}`,
 		);
 
+		// ts_rank saturates near 1.0 for any decent multi-word match, so on its
+		// own the top results are a tie that the 8M-row long tail wins.
+		// Weighting by popularity puts the book people mean first.
 		const orderBy = q
-			? raw`ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) DESC`
+			? raw`ORDER BY ts_rank(search, plainto_tsquery('english', ${q})) * ln(10 + coalesce(ratings_count, 0)) DESC`
 			: raw`ORDER BY rating DESC NULLS LAST`;
 
 		try {
